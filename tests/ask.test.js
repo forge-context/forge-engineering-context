@@ -271,6 +271,9 @@ test("audit contains route, usage, and no API key or raw IP", async () => {
   const serialized = JSON.stringify(audit);
   assert.doesNotMatch(serialized, /test-secret-never-log|203\.0\.113\.9/);
   assert.match(audit.questionHash, /^[a-f0-9]{64}$/);
+  // Only the hash is persisted: the question text itself never reaches the audit row.
+  assert.equal(audit.questionPreview, null);
+  assert.doesNotMatch(serialized, /現在の検索/);
 });
 
 const CURRENT_BEHAVIOR_TURN = [

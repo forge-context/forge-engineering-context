@@ -52,7 +52,7 @@ Cloudflare の runtime cache は data center ごとで、global に共有され�
 
 ## Audit trace
 
-`audit_traces` は request ID、時刻、route、primary/additional source、model/final sufficiency、controller warning、token、latency、result status、`cache_status`（hit / miss / bypass）、`model_called` を記録します。HIT でも audit trace は必ず記録します。質問は SHA-256 と最大 80 文字の control-character 除去済み preview だけを記録します。API key、Authorization header、raw IP、内部 Prompt、Artifact 本文は保存しません。このログは公開 Demo の技術評価用で、利用者向け Analytics ではありません。
+`audit_traces` は request ID、時刻、route、primary/additional source、model/final sufficiency、controller warning、token、latency、result status、`cache_status`（hit / miss / bypass）、`model_called` を記録します。HIT でも audit trace は必ず記録します。質問について保存するのは SHA-256 の `question_hash` だけです。質問文そのものは保存しません。`question_preview` は保存を停止しており、新しい request では常に NULL を書き込みます。列は既存 DB との互換のため schema に残していますが、destructive migration は不要です。API key、Authorization header、raw IP、内部 Prompt、Artifact 本文は保存しません。このログは公開 Demo の技術評価用で、利用者向け Analytics ではありません。
 
 ## Cloudflare Pages / D1 の手動設定
 

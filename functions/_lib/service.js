@@ -43,10 +43,6 @@ async function sha256(value) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function preview(question) {
-  return question.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
-}
-
 function isOutOfScope(question) {
   return /(認証|authentication|MFA|OAuth|JWT|ログイン方式)/i.test(question);
 }
@@ -69,13 +65,15 @@ function publicResult(requestId, result) {
   return { request_id: requestId, ...groundedPayload(result) };
 }
 
-function baseTrace({ requestId, nowIso, requirementId, questionHash, questionPreview }) {
+function baseTrace({ requestId, nowIso, requirementId, questionHash }) {
   return {
     requestId,
     createdAt: nowIso,
     requirementId,
     questionHash,
-    questionPreview,
+    // The question itself is never persisted: only its hash. The existing
+    // question_preview column stays in the schema and is always written as NULL.
+    questionPreview: null,
     questionType: null,
     route: null,
     primarySource: null,
@@ -134,7 +132,6 @@ export async function handleAskRequest(request, env, dependencies = {}) {
   let requirementId = null;
   let question = "";
   let questionHash = null;
-  let questionPreview = null;
 
   if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
     return json({ request_id: requestId, error: "Content-Type は application/json を指定してください。" }, 415);
@@ -152,7 +149,7 @@ export async function handleAskRequest(request, env, dependencies = {}) {
     nowIso,
   });
   if (!rate.ok) {
-    const trace = baseTrace({ requestId, nowIso, requirementId, questionHash, questionPreview });
+    const trace = baseTrace({ requestId, nowIso, requirementId, questionHash });
     trace.guardrailsTriggered = ["client_rate_limit"];
     trace.resultStatus = "blocked_rate_limit";
     await writeAuditSafely(store, trace);
@@ -171,8 +168,7 @@ export async function handleAskRequest(request, env, dependencies = {}) {
   requirementId = typeof body.requirement_id === "string" ? body.requirement_id : null;
   question = typeof body.question === "string" ? body.question.trim() : "";
   questionHash = await sha256(question);
-  questionPreview = preview(question);
-  const trace = baseTrace({ requestId, nowIso, requirementId, questionHash, questionPreview });
+  const trace = baseTrace({ requestId, nowIso, requirementId, questionHash });
 
   if (requirementId !== REQUIREMENT_ID) {
     await writeAuditSafely(store, trace);

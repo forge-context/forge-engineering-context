@@ -246,10 +246,19 @@ if (askForge) {
 
   const renderEvidence = async (references) => {
     const list = askForge.querySelector("[data-result-evidence]");
-    const evidence = await Promise.all(references.map(async (reference) => {
+    const described = await Promise.all(references.map(async (reference) => {
       const source = String(reference).split("#", 1)[0];
       return describeEvidence(reference, await loadArtifact(source));
     }));
+    // Several refs can resolve to the same fallback title/detail. Show one card per
+    // rendered result, in first-seen order; the raw refs stay in Trace metadata.
+    const seen = new Set();
+    const evidence = described.filter((value) => {
+      const identity = JSON.stringify([value.title, value.detail]);
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
     list.replaceChildren();
     evidence.forEach((value) => {
       const item = document.createElement("li");
@@ -290,8 +299,10 @@ if (askForge) {
     return { summary: prose[0], points: [...prose.slice(1), ...bullets] };
   };
 
+  // Evidence Sufficiency（回答根拠の充足度）: how well the retrieved Artifacts support the
+  // answer. It is not a statement about whether a Human Decision has been made.
   const sufficiencyCopy = {
-    sufficient: "必要な根拠が揃っており、この回答は提供された Artifact で確認できます。",
+    sufficient: "この回答を裏付ける根拠は十分です。Human Decision 自体が決定済みであることを意味しません。",
     partial: "一部は確認できましたが、回答に必要な Context がまだ不足しています。",
     insufficient: "この質問に答えるための根拠が、公開されている Context にありません。Forge は不足部分を推測していません。",
   };
