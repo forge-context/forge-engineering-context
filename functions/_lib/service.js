@@ -1,5 +1,7 @@
-import { createBailianClient, UpstreamError } from "./bailian.js";
-import { runRetrieval } from "./retrieval.js";
+import { ARTIFACTS_REVISION } from "./artifacts.generated.js";
+import { createBailianClient, resolveModel, UpstreamError } from "./bailian.js";
+import { buildCacheKey, createRuntimeCache, CACHE_TTL_SECONDS } from "./cache.js";
+import { PROMPT_VERSION, runRetrieval } from "./retrieval.js";
 import { createD1Store } from "./storage.js";
 
 const REQUIREMENT_ID = "owner-city-search";
@@ -49,9 +51,10 @@ function isOutOfScope(question) {
   return /(認証|authentication|MFA|OAuth|JWT|ログイン方式)/i.test(question);
 }
 
-function publicResult(requestId, result) {
+// The cacheable half of the response: request_id is always minted per request,
+// so a cached entry can never replay another request's identifier.
+function groundedPayload(result) {
   return {
-    request_id: requestId,
     route: result.route,
     sufficiency: result.finalSufficiency,
     retrieved_sources: result.retrievedSources,
@@ -60,6 +63,10 @@ function publicResult(requestId, result) {
     impact_items: result.impactItems,
     human_authority: result.humanAuthority,
   };
+}
+
+function publicResult(requestId, result) {
+  return { request_id: requestId, ...groundedPayload(result) };
 }
 
 function baseTrace({ requestId, nowIso, requirementId, questionHash, questionPreview }) {
@@ -83,7 +90,31 @@ function baseTrace({ requestId, nowIso, requirementId, questionHash, questionPre
     totalTokens: 0,
     latencyMs: 0,
     resultStatus: "validation_error",
+    cacheStatus: "bypass",
+    modelCalled: false,
   };
+}
+
+// Only retrieval-derived trace fields survive a cache round-trip; request identity
+// and usage always come from the live request.
+const CACHED_TRACE_FIELDS = Object.freeze([
+  "questionType",
+  "route",
+  "primarySource",
+  "additionalSource",
+  "additionalReason",
+  "modelSufficiency",
+  "finalSufficiency",
+  "guardrailsTriggered",
+  "validationWarnings",
+]);
+
+function pickCachedTrace(source) {
+  const picked = {};
+  for (const field of CACHED_TRACE_FIELDS) {
+    if (source && field in source) picked[field] = source[field];
+  }
+  return picked;
 }
 
 async function writeAuditSafely(store, trace) {
@@ -179,6 +210,39 @@ export async function handleAskRequest(request, env, dependencies = {}) {
     );
   }
 
+  // Runtime response cache: keyed only by server-derived identity, checked before
+  // any global budget reservation so a HIT never consumes model-token budget.
+  const cache = dependencies.cache || createRuntimeCache(dependencies.caches);
+  let cacheKey = null;
+  try {
+    cacheKey = await buildCacheKey({
+      origin: new URL(request.url).origin,
+      requirementId,
+      question,
+      contextRevision: dependencies.contextRevision || ARTIFACTS_REVISION,
+      promptVersion: dependencies.promptVersion || PROMPT_VERSION,
+      model: resolveModel(env),
+    });
+  } catch {
+    cacheKey = null;
+  }
+
+  const cached = cacheKey ? await cache.read(cacheKey.url) : null;
+  if (cached) {
+    Object.assign(trace, pickCachedTrace(cached.trace), {
+      cacheStatus: "hit",
+      modelCalled: false,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      latencyMs: 0,
+      resultStatus: cached.payload.sufficiency === "insufficient" ? "insufficient" : "success",
+    });
+    await writeAuditSafely(store, trace);
+    return json({ request_id: requestId, ...cached.payload });
+  }
+  trace.cacheStatus = cacheKey ? "miss" : "bypass";
+
   const requestLimit = positiveInteger(env.GLOBAL_DAILY_REQUEST_LIMIT, 300);
   const tokenLimit = positiveInteger(env.GLOBAL_DAILY_TOKEN_LIMIT, 300_000);
   const tokenReservation = positiveInteger(env.GLOBAL_TOKEN_RESERVATION, 8_000);
@@ -218,8 +282,18 @@ export async function handleAskRequest(request, env, dependencies = {}) {
       totalTokens: usage.totalTokens,
       latencyMs: usage.latencyMs,
       resultStatus: result.finalSufficiency === "insufficient" ? "insufficient" : "success",
+      modelCalled: true,
     });
     await writeAuditSafely(store, trace);
+    // Only stable successes reach this point; upstream and validation failures throw.
+    if (cacheKey) {
+      await cache.write(cacheKey.url, {
+        payload: groundedPayload(result),
+        trace: pickCachedTrace(trace),
+        cachedAt: nowIso,
+        ttlSeconds: CACHE_TTL_SECONDS,
+      });
+    }
     return json(publicResult(requestId, result));
   } catch (error) {
     usage = error?.usage || usage;
@@ -238,6 +312,7 @@ export async function handleAskRequest(request, env, dependencies = {}) {
       totalTokens: usage.totalTokens || 0,
       latencyMs: usage.latencyMs || 0,
       resultStatus: "upstream_error",
+      modelCalled: true,
     });
     await writeAuditSafely(store, trace);
     if (error instanceof UpstreamError) {

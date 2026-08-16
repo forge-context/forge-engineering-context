@@ -15,10 +15,14 @@ export class MalformedModelResponseError extends UpstreamError {
   }
 }
 
+export function resolveModel(env) {
+  return String(env.BAILIAN_MODEL || "qwen3.7-plus").trim();
+}
+
 export function createBailianClient(env, fetchImpl = fetch) {
   const apiKey = String(env.BAILIAN_API_KEY || "").trim();
   const baseUrl = String(env.BAILIAN_BASE_URL || "").trim();
-  const model = String(env.BAILIAN_MODEL || "qwen3.7-plus").trim();
+  const model = resolveModel(env);
   if (!apiKey || !baseUrl) throw new Error("Bailian configuration is incomplete");
 
   let endpoint;

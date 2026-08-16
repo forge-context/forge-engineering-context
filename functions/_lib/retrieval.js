@@ -1,6 +1,10 @@
 import { ARTIFACTS } from "./artifacts.generated.js";
 import { MalformedModelResponseError } from "./bailian.js";
 
+// Bump whenever ROUTER_SYSTEM, SYNTHESIS_SYSTEM, or the deterministic controller
+// changes: it is a cache-key input, so a stale value would serve outdated answers.
+export const PROMPT_VERSION = "retrieval-routing-v0.2/controller-v0.1";
+
 export const ROUTE_SOURCES = Object.freeze({
   current_behavior: "project_context.json",
   impact_scope: "project_context.json",

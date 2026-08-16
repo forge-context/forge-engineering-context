@@ -32,6 +32,26 @@ function makeStore(options = {}) {
   };
 }
 
+// Mirrors the shape the Cloudflare Cache API exposes to a Pages Function.
+function makeCacheStorage() {
+  const entries = new Map();
+  return {
+    entries,
+    default: {
+      async match(request) {
+        const entry = entries.get(request.url);
+        return entry ? new Response(entry.body, { headers: entry.headers }) : undefined;
+      },
+      async put(request, response) {
+        entries.set(request.url, {
+          body: await response.text(),
+          headers: Object.fromEntries(response.headers),
+        });
+      },
+    },
+  };
+}
+
 function makeRequest(question, requirementId = "owner-city-search", headers = {}) {
   return new Request("http://localhost/api/ask", {
     method: "POST",
@@ -251,6 +271,163 @@ test("audit contains route, usage, and no API key or raw IP", async () => {
   const serialized = JSON.stringify(audit);
   assert.doesNotMatch(serialized, /test-secret-never-log|203\.0\.113\.9/);
   assert.match(audit.questionHash, /^[a-f0-9]{64}$/);
+});
+
+const CURRENT_BEHAVIOR_TURN = [
+  { route: "current_behavior", primary_source: "project_context.json", reason: "behavior" },
+  {
+    sufficiency: "sufficient",
+    answer: "現在は姓の前方一致だけで検索します。",
+    impact_items: [],
+    evidence: ["project_context.json#surface.api.search_endpoint"],
+    additional_source: null,
+    additional_reason: null,
+  },
+];
+
+function askWithCache(question, { caches, store, client, dependencies = {} }) {
+  return handleAskRequest(makeRequest(question), ENV, { store, client, caches, ...dependencies });
+}
+
+test("identical question is served from the runtime cache without a second Bailian call", async () => {
+  const caches = makeCacheStorage();
+  const store = makeStore();
+  const client = scriptedClient([...CURRENT_BEHAVIOR_TURN, ...CURRENT_BEHAVIOR_TURN]);
+  const question = "現在の検索は どう動いていますか？";
+
+  const first = await responseJson(await askWithCache(question, { caches, store, client }));
+  assert.equal(first.status, 200);
+  assert.equal(client.calls, 2);
+  assert.equal(store.calls.audit[0].cacheStatus, "miss");
+  assert.equal(store.calls.audit[0].modelCalled, true);
+
+  const second = await responseJson(await askWithCache(question, { caches, store, client }));
+  assert.equal(second.status, 200);
+  assert.equal(client.calls, 2, "cache HIT must not call Bailian again");
+  assert.equal(second.body.answer, first.body.answer);
+  assert.equal(second.body.route, first.body.route);
+  assert.notEqual(second.body.request_id, first.body.request_id);
+
+  // A HIT still consumes the client rate limit but never the global token budget.
+  assert.equal(store.calls.rate.length, 2);
+  assert.equal(store.calls.reserve.length, 1);
+  assert.equal(store.calls.reconcile.length, 1);
+
+  // Question normalization folds insignificant whitespace into the same key.
+  const spaced = await responseJson(await askWithCache("現在の検索は　　どう動いていますか？", { caches, store, client }));
+  assert.equal(spaced.status, 200);
+  assert.equal(client.calls, 2);
+  assert.equal(caches.entries.size, 1);
+});
+
+test("a different question misses the cache", async () => {
+  const caches = makeCacheStorage();
+  const store = makeStore();
+  const client = scriptedClient([...CURRENT_BEHAVIOR_TURN, ...CURRENT_BEHAVIOR_TURN]);
+
+  await askWithCache("現在の検索はどう動いていますか？", { caches, store, client });
+  await askWithCache("現在の検索処理はどの層にありますか？", { caches, store, client });
+
+  assert.equal(client.calls, 4);
+  assert.equal(caches.entries.size, 2);
+  assert.deepEqual(store.calls.audit.map((audit) => audit.cacheStatus), ["miss", "miss"]);
+});
+
+test("a changed context revision or prompt version misses the cache", async () => {
+  const question = "現在の検索はどう動いていますか？";
+  for (const changed of [{ contextRevision: "revision-2" }, { promptVersion: "prompt-2" }]) {
+    const caches = makeCacheStorage();
+    const store = makeStore();
+    const client = scriptedClient([...CURRENT_BEHAVIOR_TURN, ...CURRENT_BEHAVIOR_TURN]);
+
+    await askWithCache(question, { caches, store, client });
+    const second = await responseJson(await askWithCache(question, { caches, store, client, dependencies: changed }));
+
+    assert.equal(second.status, 200);
+    assert.equal(client.calls, 4, `${Object.keys(changed)[0]} must invalidate the cache`);
+    assert.equal(caches.entries.size, 2);
+    assert.equal(store.calls.audit[1].cacheStatus, "miss");
+  }
+});
+
+test("a deterministic insufficient result is cached and replayed as insufficient", async () => {
+  const caches = makeCacheStorage();
+  const store = makeStore();
+  let retrievalCalls = 0;
+  const retrieval = async () => {
+    retrievalCalls += 1;
+    return {
+      questionType: "current_behavior",
+      route: "current_behavior",
+      primarySource: "project_context.json",
+      additionalSource: null,
+      additionalReason: null,
+      modelSufficiency: "insufficient",
+      finalSufficiency: "insufficient",
+      retrievedSources: ["project_context.json"],
+      answer: "取得した Project Context では回答できません。",
+      evidence: ["project_context.json#relevant_implementation_surfaces"],
+      impactItems: [],
+      humanAuthority: [],
+      guardrailsTriggered: [],
+      validationWarnings: [],
+      usage: { inputTokens: 9, outputTokens: 3, totalTokens: 12, latencyMs: 4 },
+    };
+  };
+  const question = "検索結果が空のときの文言は何ですか？";
+
+  const first = await responseJson(await askWithCache(question, { caches, store, dependencies: { retrieval } }));
+  const second = await responseJson(await askWithCache(question, { caches, store, dependencies: { retrieval } }));
+
+  assert.equal(retrievalCalls, 1);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.sufficiency, "insufficient");
+  assert.equal(second.body.answer, first.body.answer);
+  assert.equal(store.calls.audit[1].cacheStatus, "hit");
+  assert.equal(store.calls.audit[1].modelCalled, false);
+  assert.equal(store.calls.audit[1].resultStatus, "insufficient");
+  assert.equal(store.calls.audit[1].totalTokens, 0);
+});
+
+test("upstream and budget failures are never cached", async () => {
+  const caches = makeCacheStorage();
+  const question = "現在の検索はどう動いていますか？";
+
+  const blockedStore = makeStore({ reserve: { ok: false, reason: "token" } });
+  const blocked = await responseJson(await askWithCache(question, {
+    caches,
+    store: blockedStore,
+    client: { async complete() {} },
+  }));
+  assert.equal(blocked.status, 429);
+  assert.equal(blockedStore.calls.audit[0].cacheStatus, "miss");
+  assert.equal(blockedStore.calls.audit[0].modelCalled, false);
+  assert.equal(caches.entries.size, 0);
+
+  const errorStore = makeStore();
+  const errorClient = scriptedClient([{ route: "made_up", primary_source: "secrets.txt", reason: "bad" }]);
+  const failed = await responseJson(await askWithCache(question, { caches, store: errorStore, client: errorClient }));
+  assert.equal(failed.status, 502);
+  assert.equal(caches.entries.size, 0);
+
+  const okStore = makeStore();
+  const okClient = scriptedClient(CURRENT_BEHAVIOR_TURN);
+  const retried = await responseJson(await askWithCache(question, { caches, store: okStore, client: okClient }));
+  assert.equal(retried.status, 200);
+  assert.equal(okClient.calls, 2, "a previous failure must not be replayed from the cache");
+});
+
+test("the cached record holds no secret, prompt, or client identity", async () => {
+  const caches = makeCacheStorage();
+  const store = makeStore();
+  const client = scriptedClient(CURRENT_BEHAVIOR_TURN);
+  await askWithCache("現在の検索はどう動いていますか？", { caches, store, client });
+
+  const [[keyUrl, entry]] = [...caches.entries];
+  assert.match(keyUrl, /^http:\/\/localhost\/__ask-forge-cache\/askforge-cache-v0\.1\/[a-f0-9]{64}$/);
+  assert.equal(entry.headers["cache-control"], "max-age=86400");
+  assert.doesNotMatch(entry.body, /test-secret-never-log|203\.0\.113\.9|Ask Forge answer step|Authorization/);
+  assert.equal(JSON.parse(entry.body).payload.request_id, undefined);
 });
 
 test("client soft rate limit writes a blocked trace", async () => {
