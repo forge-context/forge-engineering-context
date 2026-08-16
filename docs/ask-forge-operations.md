@@ -54,6 +54,26 @@ Cloudflare の runtime cache は data center ごとで、global に共有され�
 
 `audit_traces` は request ID、時刻、route、primary/additional source、model/final sufficiency、controller warning、token、latency、result status、`cache_status`（hit / miss / bypass）、`model_called` を記録します。HIT でも audit trace は必ず記録します。質問について保存するのは SHA-256 の `question_hash` だけです。質問文そのものは保存しません。`question_preview` は保存を停止しており、新しい request では常に NULL を書き込みます。列は既存 DB との互換のため schema に残していますが、destructive migration は不要です。API key、Authorization header、raw IP、内部 Prompt、Artifact 本文は保存しません。このログは公開 Demo の技術評価用で、利用者向け Analytics ではありません。
 
+## Audit summary CLI
+
+`audit_traces` を集計する read-only CLI です。新しい Dependency は追加せず、`wrangler d1 execute` の結果を集計します。
+
+```sh
+npm run audit:summary:local
+npm run audit:summary:remote
+```
+
+追加 option は `node scripts/audit_summary.mjs` に直接渡します。`--days 7` または `--since 2026-08-01` で期間を絞り、`--json` で機械可読な形式を出力します。
+
+```sh
+node scripts/audit_summary.mjs --remote --days 7
+node scripts/audit_summary.mjs --local --json
+```
+
+出力は total requests、`result_status` / `route` / `final_sufficiency` 別件数、cache hit・miss・bypass と hit rate、`model_called` の件数と rate、total model tokens と model call あたりの平均 tokens、latency の average / P50 / P95（全 request と `model_called` のみの両方）、additional retrieval の件数と rate、`deterministic_controller`、`blocked_rate_limit`、`blocked_global_budget`、`upstream_error` の件数です。Cache HIT と block された request は latency 0 で記録されるため、model 呼び出しの実時間は `model_called` のみの行を見てください。
+
+SELECT するのは集計に必要な列だけです。質問文、`question_hash`、`question_preview`、client 情報、secret、raw IP、Prompt は取得しないため出力にも現れません。`question_preview` は新規 request では常に NULL で、この CLI からも参照しません。`--remote` は SELECT のみで、remote D1 を変更しません。
+
 ## Cloudflare Pages / D1 の手動設定
 
 1. `npx wrangler login` を行い、`npx wrangler d1 create ask-forge-demo` で D1 を作成します。

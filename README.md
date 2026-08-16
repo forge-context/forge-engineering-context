@@ -76,6 +76,10 @@ Forge は、大きく二種類のコンテキストを分離します。
 
 詳細は [docs/architecture.md](docs/architecture.md) を参照してください。本番向けの詳細実装と内部評価手法は、この公開ショーケースの対象外です。
 
+### 評価
+
+公開 Demo には、対象を限定した評価と、実行時の監査可能性があります。routing の正しさ、根拠に基づく回答、暗黙の推論を行わないこと、人間の権限を保つことを検証しており、各 request の route、sufficiency、cache 状態、token、latency は `audit_traces` に記録されます。検証内容と既知の制約は [docs/evaluation.md](docs/evaluation.md) を参照してください。一般的な benchmark ではありません。
+
 ## 5. 構想
 
 現在のショーケースは、構想する三層のうち第一層に含まれる、限定的なフローを示します。要件に限定したコンテキスト → 不明点 → 人間による合意 → 実装への引き継ぎ、という流れです。
@@ -95,6 +99,7 @@ README.md
 docs/
   architecture.md          — コンセプトアーキテクチャの詳細
   ask-forge-operations.md  — 公開 Demo のローカル運用と Cloudflare 設定
+  evaluation.md            — 対象を限定した評価内容と既知の制約
 functions/
   api/ask.js               — Pages Function の POST /api/ask
 migrations/                — D1 の利用量・監査テーブル

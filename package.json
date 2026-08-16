@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "artifacts:generate": "node scripts/generate_public_artifacts.mjs",
+    "audit:summary:local": "node scripts/audit_summary.mjs --local",
+    "audit:summary:remote": "node scripts/audit_summary.mjs --remote",
     "build": "npm run artifacts:generate && node scripts/build_static_site.mjs",
     "db:migrate:local": "wrangler d1 migrations apply ask-forge-demo --local",
     "dev": "npm run build && wrangler pages dev",
