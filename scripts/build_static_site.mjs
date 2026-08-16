@@ -7,7 +7,20 @@ const output = resolve(repoRoot, "dist");
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
-for (const source of ["index.html", "styles.css", "script.js", "public-config.js", "README.md"]) {
+// og-image.svg stays in the repository as the editable source; only the rendered PNG ships.
+const staticFiles = [
+  "index.html",
+  "styles.css",
+  "script.js",
+  "public-config.js",
+  "README.md",
+  "favicon.svg",
+  "favicon.png",
+  "og-image.png",
+  "robots.txt",
+  "sitemap.xml",
+];
+for (const source of staticFiles) {
   await cp(resolve(repoRoot, source), resolve(output, source));
 }
 await cp(resolve(repoRoot, "docs"), resolve(output, "docs"), { recursive: true });

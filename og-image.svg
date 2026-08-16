@@ -1,0 +1,24 @@
+<!-- Source for og-image.png (1200x630). Rendered to PNG for social crawlers, which do not accept SVG. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Forge — 実装できる ≠ 決めてよい">
+  <style>
+    .sans { font-family: Inter, "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif; }
+    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; }
+  </style>
+
+  <rect width="1200" height="630" fill="#f7f8f8" />
+
+  <rect x="88" y="74" width="46" height="46" fill="#1c5fd4" />
+  <text class="mono" x="111" y="105" fill="#ffffff" font-size="22" text-anchor="middle">F</text>
+  <text class="sans" x="154" y="110" fill="#17212b" font-size="32" font-weight="600" letter-spacing="-0.4">Forge</text>
+
+  <line x1="88" y1="176" x2="1112" y2="176" stroke="#d9dfe4" stroke-width="1" />
+
+  <text class="sans" x="88" y="352" fill="#17212b" font-size="78" font-weight="600" letter-spacing="-3.5">実装できる<tspan fill="#1c5fd4" dx="22">≠</tspan><tspan fill="#17212b" dx="22">決めてよい</tspan></text>
+
+  <text class="mono" x="88" y="428" fill="#687480" font-size="21" letter-spacing="0.6">Engineering Context for AI-native Development</text>
+
+  <line x1="88" y1="530" x2="1112" y2="530" stroke="#d9dfe4" stroke-width="1" />
+
+  <text class="mono" x="88" y="570" fill="#687480" font-size="16" letter-spacing="0.5">forge.jianguoding.com</text>
+  <text class="mono" x="1112" y="570" fill="#687480" font-size="16" letter-spacing="1.2" text-anchor="end">PUBLIC CONCEPT SHOWCASE</text>
+</svg>
