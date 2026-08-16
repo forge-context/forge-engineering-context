@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Forge は、Coding Agent が実装を始める前に、根拠・不明点・人間が決めるべきことを整理する公開コンセプトショーケースです。"
+    />
+    <title>Forge — 実装前の Project Context</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">本文へ移動</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="#top" aria-label="Forge ホーム">
+          <span class="brand-mark" aria-hidden="true">F</span>
+          <span>Forge</span>
+        </a>
+        <nav aria-label="メインナビゲーション">
+          <a href="#scenario">Scenario</a>
+          <a href="#reference">Reference</a>
+          <a href="#vision">Vision</a>
+          <a class="nav-github" href="https://github.com/forge-context/forge-engineering-context">GitHub ↗</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero section" id="top">
+        <div class="shell">
+          <div class="eyebrow"><span>BEFORE IMPLEMENTATION</span><span>PUBLIC CONCEPT SHOWCASE</span></div>
+          <div class="hero-grid">
+            <div class="hero-copy">
+              <p class="section-number">00 / START HERE</p>
+              <h1>このまま Coding Agent に<br />実装させますか？</h1>
+              <div class="requirement-block">
+                <span>要件</span>
+                <p>「注文詳細画面から注文を<br class="mobile-only" />キャンセルできるようにしたい。」</p>
+              </div>
+              <p class="hero-lede">
+                実装経路が見えても、仕様の判断までは終わっていません。Forge は Coding Agent の前段で、観測できる事実と、人の権限が必要な判断を分けます。
+              </p>
+            </div>
+
+            <div class="hero-console" aria-label="注文キャンセル要件の実装前確認">
+              <div class="console-bar">
+                <span class="console-title">requirement / order-cancellation</span>
+                <span class="status-dot"><i></i> alignment required</span>
+              </div>
+              <div class="implementation-path" aria-label="想定される実装経路">
+                <span>Order Detail</span><b>↓</b><span>Cancel API</span><b>↓</b><span>OrderController</span><b>↓</b><span>OrderService</span>
+              </div>
+              <div class="console-section questions">
+                <p class="console-label"><span>!</span> 実装前に確認が必要です</p>
+                <ul>
+                  <li><b>01</b> PAID の注文をキャンセルした場合、返金まで実行するのか？</li>
+                  <li><b>02</b> 誰が PAID 注文をキャンセルできるのか？</li>
+                  <li><b>03</b> 在庫を戻すタイミングはいつか？</li>
+                </ul>
+              </div>
+              <div class="console-section observed-mini">
+                <p class="console-label"><span>✓</span> 既存 Context から観測済み</p>
+                <div class="tag-list">
+                  <span>Payment.refund()</span>
+                  <span>Inventory reservation</span>
+                  <span>Status → Audit Log</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-statement">
+            <p>実装できる <span>≠</span> 決めてよい</p>
+            <p>Forge は「どう実装するか」を決めるのではなく、実装前に「AI が決めてよいこと」と「人が決めるべきこと」を分けます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section scenario" id="scenario">
+        <div class="shell">
+          <div class="section-heading">
+            <div>
+              <p class="section-number">01 / ILLUSTRATIVE SCENARIO</p>
+              <h2>注文キャンセル要件を、<br />6つの段階で分解する。</h2>
+            </div>
+            <p class="heading-note"><b>Illustrative Scenario</b><br />考え方を示すための簡略化した業務シナリオです。実在するリポジトリでの実行結果ではありません。</p>
+          </div>
+
+          <div class="stepper" data-stepper>
+            <div class="step-list" role="tablist" aria-label="Forge の処理ステップ">
+              <button class="step-button is-active" type="button" role="tab" aria-selected="true" aria-controls="step-panel" data-step="0"><span>01</span>要件</button>
+              <button class="step-button" type="button" role="tab" aria-selected="false" aria-controls="step-panel" data-step="1"><span>02</span>関連 Context</button>
+              <button class="step-button" type="button" role="tab" aria-selected="false" aria-controls="step-panel" data-step="2"><span>03</span>根拠</button>
+              <button class="step-button" type="button" role="tab" aria-selected="false" aria-controls="step-panel" data-step="3"><span>04</span>Context Gap</button>
+              <button class="step-button" type="button" role="tab" aria-selected="false" aria-controls="step-panel" data-step="4"><span>05</span>Human Alignment</button>
+              <button class="step-button" type="button" role="tab" aria-selected="false" aria-controls="step-panel" data-step="5"><span>06</span>Implementation Package</button>
+            </div>
+            <div class="step-panel" id="step-panel" role="tabpanel" aria-live="polite">
+              <div class="step-panel-meta"><span data-step-index>STEP 01</span><span data-step-status>入力</span></div>
+              <div class="step-panel-body">
+                <div>
+                  <p class="step-kicker" data-step-kicker>要件</p>
+                  <h3 data-step-title>注文詳細画面から、注文をキャンセルできるようにしたい。</h3>
+                </div>
+                <p data-step-description>この要件が触れる実装面をたどり、根拠と未確定の判断を段階ごとに整理します。</p>
+              </div>
+              <div class="step-evidence" data-step-detail>
+                <span>入力</span><code>requirement.order_cancellation</code>
+              </div>
+            </div>
+          </div>
+
+          <div class="comparison" data-comparison>
+            <div class="comparison-intro">
+              <p class="section-number">判断の境界</p>
+              <h3>技術的に妥当でも、<br />承認された判断とは限らない。</h3>
+              <div class="tab-switch" role="tablist" aria-label="Forge の有無を比較">
+                <button type="button" role="tab" aria-selected="true" data-comparison-tab="without">Without Forge</button>
+                <button type="button" role="tab" aria-selected="false" data-comparison-tab="with">With Forge</button>
+              </div>
+            </div>
+
+            <div class="comparison-panel" data-comparison-panel="without">
+              <div class="panel-heading">
+                <span class="panel-index">WITHOUT / 01</span>
+                <span class="assumption-badge">技術的に妥当な仮定</span>
+              </div>
+              <h4>Coding Agent が補うかもしれない前提</h4>
+              <ul class="assumption-list">
+                <li><code>PAID</code><span>→</span><code>CANCELLED</code></li>
+                <li>自動で返金を実行する</li>
+                <li>在庫を即時に戻す</li>
+                <li>顧客本人ならキャンセル可能</li>
+              </ul>
+              <p class="panel-footnote">いずれも技術的には自然な選択肢です。しかし、要件や Project Context によって許可された判断とは限りません。</p>
+            </div>
+
+            <div class="comparison-panel" data-comparison-panel="with" hidden>
+              <div class="panel-heading">
+                <span class="panel-index">WITH / 02</span>
+                <span class="observed-badge">判断権限で分離</span>
+              </div>
+              <p class="with-lede">Forge が確認するのは、Project Context から安全に確定できない判断だけです。</p>
+              <div class="authority-grid">
+                <div class="authority-column observed-column">
+                  <div class="authority-column-heading">
+                    <span><b>03</b> 観測済み</span>
+                    <strong><i class="small-check">✓</i> 質問せず、実装 Context へ</strong>
+                  </div>
+                  <ul class="authority-list">
+                    <li><code>Payment.refund()</code> が存在する</li>
+                    <li>在庫予約が存在する</li>
+                    <li>注文 status の変更は Audit Log 対象</li>
+                  </ul>
+                </div>
+                <div class="authority-column decision-column">
+                  <div class="authority-column-heading">
+                    <span><b>03</b> 人の判断が必要</span>
+                    <strong><i class="small-alert">!</i> ここだけ Human Alignment へ</strong>
+                  </div>
+                  <ul class="authority-list">
+                    <li>返金ポリシー</li>
+                    <li>キャンセル権限</li>
+                    <li>在庫を解放するタイミング</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="authority-principle">
+                <span>Forge の分離原則</span>
+                <p>すべてを質問するのではなく、確立できる事実は引き継ぎ、推論してはいけない判断だけを人に戻します。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section reference" id="reference">
+        <div class="shell">
+          <div class="section-heading">
+            <div>
+              <p class="section-number">02 / VALIDATED REFERENCE</p>
+              <h2>公開コードで追える、<br />再現可能な Reference Case。</h2>
+            </div>
+            <div class="reference-meta">
+              <span>SPRING PETCLINIC</span>
+              <code>88e37c15cf6fc8490b01bc3e8e2c800cec1ac272</code>
+            </div>
+          </div>
+
+          <div class="reference-overview">
+            <div class="reference-copy">
+              <p>Spring PetClinic の固定リビジョンを使い、<b>「飼い主検索に市区町村の条件を追加する」</b>という要件を、実在する実装面に沿って整理した公開リファレンスです。</p>
+              <p>成果物は人手で整理した <i>curated reference artifacts</i> です。実行可能な Forge パイプラインや、すべてのリポジトリへの対応を示すものではありません。</p>
+            </div>
+            <div class="surface-path" aria-label="PetClinic の実装経路">
+              <div><span>01</span><b>Search Form</b><small>findOwners.html</small></div>
+              <i>↓</i>
+              <div><span>02</span><b>OwnerController</b><small>processFindForm</small></div>
+              <i>↓</i>
+              <div><span>03</span><b>OwnerRepository</b><small>findByLastNameStartingWith</small></div>
+              <i>↓</i>
+              <div><span>04</span><b>OwnerControllerTests</b><small>observable behavior</small></div>
+            </div>
+          </div>
+
+          <div class="reference-flow" aria-label="Forge リファレンスの処理フロー">
+            <div><span>01</span><b>Requirement</b></div><i>→</i>
+            <div><span>02</span><b>Project Context</b></div><i>→</i>
+            <div><span>03</span><b>Evidence-backed Gap</b></div><i>→</i>
+            <div><span>04</span><b>Human Alignment</b></div><i>→</i>
+            <div><span>05</span><b>Implementation Package</b></div>
+          </div>
+
+          <div class="artifact-grid">
+            <a class="artifact-card" href="examples/petclinic/gaps.json">
+              <div class="artifact-top"><code>gaps.json</code><span>PRE ALIGNMENT</span></div>
+              <h3>Human alignment 前の snapshot</h3>
+              <p>市区町村の照合方法、条件の組み合わせ、エラーの置き場所を Human authority が必要な Gap として記録。</p>
+              <span class="artifact-link">Artifact を見る <b>↗</b></span>
+            </a>
+            <div class="artifact-transition" aria-hidden="true"><span>HUMAN<br />DECISION</span><b>→</b></div>
+            <a class="artifact-card artifact-ready" href="examples/petclinic/implementation_package.json">
+              <div class="artifact-top"><code>implementation_package.json</code><span>POST ALIGNMENT</span></div>
+              <h3>Human decision 後の snapshot</h3>
+              <p>根拠と決定済み事項を組み合わせ、Coding Agent が再推論せずに扱える実装面とテスト意図を整理。</p>
+              <span class="artifact-link">Artifact を見る <b>↗</b></span>
+            </a>
+          </div>
+
+          <div class="reference-result">
+            <div><span>GAPS</span><strong>03</strong><small>human authority decisions</small></div>
+            <div><span>CONFLICTS</span><strong>00</strong><small>この reference case では検出なし</small></div>
+            <p>この reference case では <b>Gap は検出されていますが、Conflict はありません。</b></p>
+          </div>
+
+          <div class="text-links" aria-label="リファレンスリンク">
+            <a href="README.md">README <span>↗</span></a>
+            <a href="docs/architecture.md">architecture.md <span>↗</span></a>
+            <a href="examples/petclinic/requirement.md">PetClinic artifacts <span>↗</span></a>
+            <a href="https://github.com/forge-context/forge-engineering-context">GitHub repository <span>↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section vision" id="vision">
+        <div class="shell">
+          <div class="section-heading vision-heading">
+            <div>
+              <p class="section-number">03 / VISION</p>
+              <h2>Context から、Engineering Intelligence へ。</h2>
+            </div>
+            <div class="vision-key" aria-label="ビジョンの流れ"><span>Context</span><i>↓</i><span>Experience</span><i>↓</i><span>Intelligence</span></div>
+          </div>
+
+          <div class="vision-stages">
+            <article class="vision-stage is-current">
+              <div class="stage-meta"><span>01</span><b>CURRENT VERTICAL SLICE</b></div>
+              <h3>Project<br />Intelligence</h3>
+              <p>一つのプロジェクトについて、要件に必要な Context を理解し、判断・影響範囲・Implementation Handoff を支援する。</p>
+              <small>現在の公開ショーケースは、この Phase 1 の限定的なフローを示します。</small>
+            </article>
+            <article class="vision-stage">
+              <div class="stage-meta"><span>02</span><b>VISION / NOT IMPLEMENTED</b></div>
+              <h3>Organizational<br />Intelligence</h3>
+              <p>複数プロジェクトから、共通する標準・Skill・判断・Risk Pattern を蓄積する。</p>
+              <small>今後の構想であり、現在の公開リポジトリの実装済み機能ではありません。</small>
+            </article>
+            <article class="vision-stage">
+              <div class="stage-meta"><span>03</span><b>VISION / NOT IMPLEMENTED</b></div>
+              <h3>Adaptive Engineering<br />Intelligence</h3>
+              <p>蓄積した Engineering Experience を、未知のプロジェクト調査や将来の開発判断に活かす。</p>
+              <small>今後の構想であり、現在の公開リポジトリの実装済み機能ではありません。</small>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section github-cta" id="github">
+        <div class="shell cta-inner">
+          <div class="closing-copy">
+            <p class="section-number">04 / INSPECT THE EVIDENCE</p>
+            <h2>実装できることと、<br />AI が決めてよいことは違う。</h2>
+            <p>Forge は、検証可能な根拠と人の判断を分ける Engineering Hypothesis です。公開リポジトリで、その根拠と curated artifacts を確認できます。</p>
+          </div>
+          <div class="cta-actions">
+            <span class="cta-label">根拠と成果物を確認する</span>
+            <a class="button button-primary" href="https://github.com/forge-context/forge-engineering-context">リポジトリを見る <span>↗</span></a>
+            <a class="button" href="docs/architecture.md">architecture.md を読む <span>→</span></a>
+            <a class="button" href="examples/petclinic/project_context.json">Reference artifacts を確認 <span>→</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell footer-inner">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><span>Forge</span></div>
+        <p>CONTEXT → EVIDENCE → HUMAN DECISION</p>
+        <span>PUBLIC CONCEPT SHOWCASE</span>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
