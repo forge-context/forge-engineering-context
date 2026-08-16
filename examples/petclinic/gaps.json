@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "artifact_stage": "pre_alignment",
+  "provenance": "curated_showcase",
+  "requirement_ref": "requirement.md",
+  "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "conflicts": [],
+  "gaps": [
+    {
+      "id": "gap.city_matching_semantics",
+      "type": "human_authority_decision",
+      "question": "新しい市区町村条件は、ユーザーが入力した値とどのように照合するか。",
+      "observed_existing_behavior": {
+        "description": "既存の姓検索は前方一致（starts with）を使用します。Controller が直接呼び出す OwnerRepository.findByLastNameStartingWith というメソッド名から確認できます。",
+        "evidence_ref": "project_context.json#surface.repository.owner_lookup"
+      },
+      "why_not_resolved_automatically": "市区町村を検索するメソッドはまだ存在せず、姓と同じ前方一致にするか、別の方式にするかを示す情報はコードベースにありません。コードベースから実際に観測できる照合方法は、姓に対する前方一致だけです。以下の他の選択肢は候補であり、既存の動作ではありません。",
+      "candidate_options": [
+        {
+          "option": "prefix (starts with)",
+          "status": "consistent with observed convention",
+          "rationale": "既存の findByLastNameStartingWith という規約に合わせられますが、市区町村についての根拠はまだありません。"
+        },
+        {
+          "option": "exact match",
+          "status": "not observed in codebase",
+          "rationale": "通常の保存列に対するもっとも単純な解釈ですが、既存の飼い主検索クエリでは使用されていません。"
+        },
+        {
+          "option": "partial / contains",
+          "status": "not observed in codebase",
+          "rationale": "現在の飼い主検索にはない、新しい照合規約を導入することになります。"
+        }
+      ],
+      "also_unresolved": [
+        "市区町村の照合で大文字と小文字を区別するかどうかも、根拠からは判断できません。H2 用スキーマでは last_name を VARCHAR_IGNORECASE として宣言していますが、これは H2 固有の設定です。意図的な製品仕様であることは確認できず、市区町村に求める動作の根拠にもなりません。"
+      ],
+      "status": "open",
+      "resolution": null
+    },
+    {
+      "id": "gap.search_criteria_combination",
+      "type": "human_authority_decision",
+      "question": "市区町村条件を既存の姓条件とどのように組み合わせるか。一方または両方の値が空の場合を含む。",
+      "observed_existing_behavior": {
+        "description": "現在、空の姓は空文字列として扱われ、すべての飼い主に一致します。Controller のコメントには、引数なしのリクエストですべてのレコードを返すことが明記されています。現在は二つ目の条件がないため、複数の検索条件を組み合わせる既存例はありません。",
+        "evidence_ref": "project_context.json#surface.api.search_endpoint"
+      },
+      "why_not_resolved_automatically": "「空ならすべてに一致する」という動作を二つ目のフィールドにも適用するか、二つの入力値をどのように組み合わせるかは、現在の単一条件検索に直接の前例がない製品上の判断です。",
+      "candidate_options": [
+        {
+          "option": "AND - both provided values must match",
+          "status": "not observed in codebase",
+          "rationale": "複数項目の検索フォームで一般的な既定動作ですが、このコードベースには既存例がありません。"
+        },
+        {
+          "option": "OR - either provided value may match",
+          "status": "not observed in codebase",
+          "rationale": "より広い検索として妥当な選択肢ですが、このコードベースには既存例がありません。"
+        }
+      ],
+      "also_unresolved": [
+        "姓が空の場合に、市区町村だけの検索を許可するか",
+        "両方のフィールドを空にできるか。その場合、現在の引数なし検索と同様に、すべての飼い主を返すか"
+      ],
+      "status": "open",
+      "resolution": null
+    },
+    {
+      "id": "gap.no_result_error_placement",
+      "type": "human_authority_decision",
+      "question": "姓、市区町村、またはその両方で飼い主を検索できる場合、検索結果なしのエラーをどこに関連付けるか。",
+      "observed_existing_behavior": {
+        "description": "現在の単一条件のフローでは、notFound エラーを lastName に関連付けます。条件が二つになると、検索結果が空であっても、どちらか一方のフィールドが不正であるとは断定できません。",
+        "evidence_ref": "project_context.json#surface.test.owner_controller"
+      },
+      "why_not_resolved_automatically": "既存の lastName フィールドエラーを維持するか、フォーム全体のエラーへ移すかによって、複合検索や市区町村だけの検索に失敗した際のユーザーとテストの解釈が変わります。この二条件のケースに対する前例はリポジトリにありません。",
+      "candidate_options": [
+        {
+          "option": "form-level error",
+          "status": "not observed in current owner search",
+          "rationale": "どちらか一方の条件に原因を帰属させず、組み合わせた検索結果を表します。"
+        },
+        {
+          "option": "field-level error",
+          "status": "lastName is the current placement",
+          "rationale": "既存の lastName への関連付けを維持するか、条件に応じてフィールドを選べますが、市区町村だけの検索と複合検索に対する明示的な規則が必要です。"
+        }
+      ],
+      "status": "open",
+      "resolution": null
+    }
+  ]
+}

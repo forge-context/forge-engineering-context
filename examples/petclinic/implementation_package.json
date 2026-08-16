@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "artifact_stage": "post_alignment",
+  "provenance": "curated_showcase",
+  "requirement_ref": "requirement.md",
+  "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "conflicts": [],
+  "status": "implementation_ready",
+  "human_decisions": [
+    {
+      "gap_ref": "gap.city_matching_semantics",
+      "decided_by": "human_alignment",
+      "decision": {
+        "matching": "prefix (starts with)",
+        "case_sensitivity": "市区町村のみ大文字と小文字を区別しない",
+        "last_name_behavior": "固定リビジョンにおける既存の前方一致の動作を維持し、大文字と小文字を区別しないという新たな規則は追加しない"
+      },
+      "basis": {
+        "matching": "repository_evidence — 既存の findByLastNameStartingWith という規約との一貫性を保つために選択",
+        "case_sensitivity": "新しい市区町村条件についての human_decision — リポジトリやスキーマから確認できる事実ではなく、既存コードから推論せず、判断者が決定",
+        "last_name_behavior": "scope constraint — 市区町村についての判断は、既存の姓の動作を変更する権限を含まない"
+      }
+    },
+    {
+      "gap_ref": "gap.search_criteria_combination",
+      "decided_by": "human_alignment",
+      "decision": {
+        "combination": "AND — 姓と市区町村の両方が入力された場合は、両方に一致する必要がある",
+        "city_only_search": "対応する — 姓が空でも、市区町村が入力されていれば有効な検索とする",
+        "both_blank": "対応する — 現在の引数なし検索と同様に、すべての飼い主を返す"
+      },
+      "basis": {
+        "combination": "human_decision — 二つの条件を組み合わせる既存例がないため",
+        "city_only_search": "human_decision — 既存の、姓が空ならすべてに一致する動作を踏まえて決定",
+        "both_blank": "Controller で確認できる既存の空の姓に対する動作と整合"
+      }
+    },
+    {
+      "gap_ref": "gap.no_result_error_placement",
+      "decided_by": "human_alignment",
+      "decision": {
+        "placement": "owner の binding result に対するフォーム全体のエラー",
+        "error_code": "notFound",
+        "message": "見つかりません"
+      },
+      "basis": {
+        "placement": "human_decision — lastName と city を組み合わせた検索の失敗は、どちらか一方のフィールドに原因を帰属できないため、フォーム全体の結果としてエラーを表す"
+      }
+    }
+  ],
+  "implementation_surfaces": [
+    {
+      "surface_ref": "surface.ui.search_form",
+      "change": "検索フォームに市区町村のテキスト入力欄を追加し、Owner オブジェクトに既存の city フィールドへバインドします。"
+    },
+    {
+      "surface_ref": "surface.model.owner_form_binding",
+      "change": "変更なし — Owner には city フィールドがすでにあります。モデルの変更は不要で、検索フローから読み取るようにします。"
+    },
+    {
+      "surface_ref": "surface.api.search_endpoint",
+      "change": "processFindForm で owner.getLastName() とともに owner.getCity() を読み取ります。姓に対する既存処理と同様に、空の場合は空文字列を既定値とし、両方の値を Repository へ渡します。"
+    },
+    {
+      "surface_ref": "surface.repository.owner_lookup",
+      "change": "既存の姓の前方一致と、大文字と小文字を区別しない市区町村の前方一致を組み合わせる Repository クエリメソッドを追加します。lastName について、大文字と小文字を区別しないという新たな規則は追加しません。Spring Data の正確な導出メソッド名は実装時に確定します。Service 層は追加せず、既存フローと同様に Controller から Repository を直接呼び出します。"
+    },
+    {
+      "surface_ref": "surface.test.owner_controller",
+      "change": "二条件のクエリと、人間が決定した検索結果なしの場合のフォーム全体エラーに合わせて、OwnerControllerTests を更新します。",
+      "test_intents": [
+        "lastName と city の両方を指定：両方の値を Repository へ渡す",
+        "city のみ：lastName が空でも有効とし、city で結果を絞り込む",
+        "両方のフィールドが空：すべての飼い主を返す",
+        "city の照合では大文字と小文字を区別しない",
+        "AND の組み合わせ：指定した両方の条件を満たす結果だけを返す",
+        "検索結果なし：検索フォームを返し、フォーム全体に notFound エラーを設定する"
+      ]
+    },
+    {
+      "surface_ref": "surface.persistence.owner_table",
+      "change": "変更なし — city 列はすでに存在します。"
+    }
+  ],
+  "handoff_note": "この人手で整理した合意後パッケージは、Coding Agent への入力を想定しています。市区町村の照合方法と大文字・小文字の扱い、条件の組み合わせ、市区町村だけ／空フィールドの場合の動作、検索結果なしのエラー位置は、上記 human_decisions に従って決定済みであり、再推論しません。既存の lastName の動作は変更しません。未確定なのは、Repository の正確な導出メソッド名だけです。"
+}

@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "artifact_stage": "investigation",
+  "provenance": "curated_showcase",
+  "requirement_ref": "requirement.md",
+  "reference_project": "spring-petclinic（公開参照用・簡略版）",
+  "reference_repository": "https://github.com/spring-projects/spring-petclinic",
+  "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "note": "説明用に簡略化しており、アプリケーション全体を表すものではありません。以下の根拠はすべて reference_revision に固定しています。",
+  "relevant_implementation_surfaces": [
+    {
+      "id": "surface.ui.search_form",
+      "layer": "UI",
+      "description": "飼い主検索フォームのテンプレートです。現在は姓の入力欄だけを表示し、市区町村の入力欄はありません。",
+      "evidence": {
+        "type": "template",
+        "path": "src/main/resources/templates/owners/findOwners.html",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/resources/templates/owners/findOwners.html",
+        "note": "フォームは owner モデル属性（th:object=\"${owner}\"）にバインドされ、th:field=\"*{lastName}\" だけを表示します。"
+      }
+    },
+    {
+      "id": "surface.model.owner_form_binding",
+      "layer": "UI / Controller",
+      "description": "Owner は JPA ドメインエンティティであると同時に、検索フォームが直接バインドするオブジェクトです。検索条件専用クラスや DTO はありません。Owner には create / edit フォームで使用する city フィールドがすでにありますが、検索フォームはまだその値を読み取りません。",
+      "evidence": {
+        "type": "class",
+        "path": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+        "note": "@Entity クラスには既存の @Column private String city フィールドがあります。lastName は基底クラス Person から継承しています。"
+      }
+    },
+    {
+      "id": "surface.api.search_endpoint",
+      "layer": "Controller",
+      "description": "検索リクエストを処理する Controller メソッドです。GET リクエストから Owner オブジェクトを直接バインドし、Repository を直接呼び出します。このフローに中間の Service クラスはありません。",
+      "evidence": {
+        "type": "controller_method",
+        "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        "symbol": "processFindForm",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+        "note": "owner.getLastName() を読み取り、空の入力は空文字列を既定値としたうえで、注入された OwnerRepository の owners.findByLastNameStartingWith(...) を呼び出します。"
+      }
+    },
+    {
+      "id": "surface.repository.owner_lookup",
+      "layer": "Repository",
+      "description": "Controller が姓検索のために直接呼び出す Spring Data の Repository メソッドです。現在、市区町村による検索メソッドはありません。",
+      "evidence": {
+        "type": "repository_interface",
+        "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java",
+        "symbol": "findByLastNameStartingWith",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java",
+        "note": "クエリは手書きではなく、Spring Data がメソッド名から導出します（姓の前方一致）。"
+      }
+    },
+    {
+      "id": "surface.test.owner_controller",
+      "layer": "Test",
+      "description": "飼い主検索フローの Controller レベルのテストです。既存のテスト範囲には、空条件の検索、姓検索、該当する飼い主がいない場合の現在の lastName フィールドエラーが含まれます。新しい市区町村の動作に関係するテスト範囲です。",
+      "evidence": {
+        "type": "test_class",
+        "path": "src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java",
+        "symbol": "OwnerControllerTests",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java",
+        "note": "モック化した OwnerRepository を使用し、引数なし、姓、空白、検索結果なしの各ケースについて processFindForm をテストします。"
+      }
+    },
+    {
+      "id": "surface.persistence.owner_table",
+      "layer": "Database",
+      "description": "飼い主データの保存先です。owners テーブルには city 列がすでに存在し、値も保存されていますが、現在は検索条件として使用していません。",
+      "evidence": {
+        "type": "schema",
+        "path": "src/main/resources/db/h2/schema.sql",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/resources/db/h2/schema.sql",
+        "note": "owners テーブルには city 列があります。同じリビジョンの MySQL および PostgreSQL 用スキーマにも同じ列がありますが、簡潔にするため個別のリンクは記載していません。"
+      }
+    }
+  ]
+}
