@@ -1,6 +1,24 @@
 # アーキテクチャ（コンセプト）
 
-本書では、Forge のアーキテクチャを [README](../README.md) より一段詳しく説明します。ただし、扱う範囲は公開可能なコンセプトレベルに限定します。本番向けの詳細実装と内部評価手法は、この公開ショーケースの対象外です。本リポジトリに含まれるのは、人手で整理したサンプル成果物であり、完全に実行可能な Forge の実装ではありません。
+本書では、Forge のアーキテクチャを [README](../README.md) より一段詳しく説明します。ただし、扱う範囲は公開可能なコンセプトレベルに限定します。本番向けの詳細実装と内部評価手法は、この公開ショーケースの対象外です。本リポジトリには、人手で整理したサンプル成果物と、それだけを参照する限定的な Ask Forge 公開 Demo が含まれます。一般のリポジトリを調査する完全な Forge 実装ではありません。
+
+## Ask Forge Public Demo v0.1
+
+公開 Demo は `owner-city-search` という一つの検証済み要件に限定し、次の流れを実行します。
+
+```
+要件に限定した質問
+  → route
+  → bounded retrieval（最大 2 Artifact）
+  → model sufficiency
+  → deterministic guardrails
+  → final sufficiency
+  → grounded answer
+```
+
+一次ソースは route ごとに固定されています。明示された `evidence_ref` が回答に必要な場合だけ二つ目の許可済み Artifact を参照し、再帰検索は行いません。影響範囲は `project_context.json` にある surface ID の allowlist で検証し、Human decision は `gaps.json` の open 項目から決定論的に提示します。モデルが提示した Sufficiency と Controller が確定した最終 Sufficiency は別々に監査します。
+
+v0.1 には Vector DB、Embedding、一般的な RAG、Agent loop はありません。LLM は質問の分類と、取得済み Artifact の要約に使いますが、プロジェクト知識や Human decision の権威にはしません。認証など公開要件外の問いは、モデルを呼ばず `insufficient` とします。運用と Cloudflare 設定は [Ask Forge operations](ask-forge-operations.md) を参照してください。
 
 ## 二種類のコンテキスト
 

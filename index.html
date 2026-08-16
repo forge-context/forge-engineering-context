@@ -23,6 +23,7 @@
         <nav aria-label="メインナビゲーション">
           <a href="#scenario">Scenario</a>
           <a href="#reference">Reference</a>
+          <a href="#ask-forge">Ask Forge</a>
           <a href="#vision">Vision</a>
           <a class="nav-github" href="https://github.com/forge-context/forge-engineering-context">GitHub ↗</a>
         </nav>
@@ -289,11 +290,81 @@
         </div>
       </section>
 
+      <section class="section ask-forge" id="ask-forge">
+        <div class="shell">
+          <div class="section-heading ask-heading">
+            <div>
+              <p class="section-number">03 / LIVE REQUIREMENT CHECK</p>
+              <h2>この要件について<br />Forge に確認する</h2>
+            </div>
+            <p class="heading-note"><b>BOUNDED PUBLIC DEMO</b><br />公開済みの構造化 Artifact だけを、最大 2 ソースまで参照します。一般的な PetClinic の知識では補いません。</p>
+          </div>
+
+          <div class="ask-requirement">
+            <span>ACTIVE REQUIREMENT</span>
+            <div><b>飼い主検索に市区町村の条件を追加する</b><code>owner-city-search</code></div>
+          </div>
+
+          <div class="ask-layout" data-ask-forge>
+            <form class="ask-form" data-ask-form>
+              <fieldset>
+                <legend>確認する質問を選ぶ</legend>
+                <div class="preset-list">
+                  <button type="button" data-preset>現在の検索はどう動いていますか？</button>
+                  <button type="button" data-preset>この要件はどこに影響しますか？</button>
+                  <button type="button" data-preset>実装前に人が決める必要があることは何ですか？</button>
+                  <button type="button" data-preset>なぜ city の照合方法を Forge は自動で決めなかったのですか？</button>
+                  <button type="button" data-preset>Human Alignment 後、Coding Agent には何を渡せますか？</button>
+                </div>
+              </fieldset>
+              <label for="ask-question">または、要件について質問する</label>
+              <textarea id="ask-question" data-ask-question maxlength="500" rows="4" placeholder="この要件について確認したいことを入力してください。"></textarea>
+              <div class="ask-form-footer">
+                <span data-character-count>0 / 500</span>
+                <button class="ask-submit" type="submit" data-ask-submit>Forge に確認する <span>→</span></button>
+              </div>
+              <p class="ask-form-note">質問文だけを送信します。モデル、Prompt、Artifact、API 設定はサーバー側で固定しています。</p>
+            </form>
+
+            <div class="ask-output" aria-live="polite" aria-busy="false" data-ask-output>
+              <div class="ask-empty" data-ask-empty>
+                <span>FORGE / READY</span>
+                <div>
+                  <p>Preset を選ぶか、この要件について質問してください。</p>
+                  <small>Forge は Project Context・Evidence・Human Authority を確認し、根拠のある範囲だけを回答します。</small>
+                </div>
+              </div>
+              <div class="ask-error" data-ask-error hidden></div>
+              <div class="ask-result" data-ask-result hidden>
+                <section class="answer-section">
+                  <h3>Answer</h3>
+                  <div class="answer-notice" data-result-answer-notice hidden></div>
+                  <p class="answer-summary" data-result-answer-summary></p>
+                  <ul class="answer-points" data-result-answer-points hidden></ul>
+                </section>
+                <section class="evidence-section"><h3>Evidence</h3><ul data-result-evidence></ul></section>
+                <section class="authority-section"><h3>Human Decision</h3><div data-result-authority></div></section>
+                <details class="result-trace">
+                  <summary>Trace metadata</summary>
+                  <dl>
+                    <div><dt>Route</dt><dd data-result-route></dd></div>
+                    <div><dt>Sufficiency</dt><dd data-result-sufficiency></dd></div>
+                    <div><dt>Sources</dt><dd data-result-sources></dd></div>
+                    <div><dt>Evidence refs</dt><dd><ul data-result-raw-evidence></ul></dd></div>
+                    <div><dt>Request ID</dt><dd><code data-result-request-id></code></dd></div>
+                  </dl>
+                </details>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section vision" id="vision">
         <div class="shell">
           <div class="section-heading vision-heading">
             <div>
-              <p class="section-number">03 / VISION</p>
+              <p class="section-number">04 / VISION</p>
               <h2>Context から、Engineering Intelligence へ。</h2>
             </div>
             <div class="vision-key" aria-label="ビジョンの流れ"><span>Context</span><i>↓</i><span>Experience</span><i>↓</i><span>Intelligence</span></div>
@@ -323,17 +394,25 @@
       </section>
 
       <section class="section github-cta" id="github">
-        <div class="shell cta-inner">
-          <div class="closing-copy">
-            <p class="section-number">04 / INSPECT THE EVIDENCE</p>
-            <h2>実装できることと、<br />AI が決めてよいことは違う。</h2>
-            <p>Forge は、検証可能な根拠と人の判断を分ける Engineering Hypothesis です。公開リポジトリで、その根拠と curated artifacts を確認できます。</p>
+        <div class="shell">
+          <div class="cta-inner">
+            <div class="closing-copy">
+              <p class="section-number">05 / INSPECT THE EVIDENCE</p>
+              <h2>実装できることと、<br />AI が決めてよいことは違う。</h2>
+              <p>Forge は、検証可能な根拠と人の判断を分ける Engineering Hypothesis です。公開リポジトリで、その根拠と curated artifacts を確認できます。</p>
+            </div>
+            <div class="cta-actions">
+              <span class="cta-label">根拠と成果物を確認する</span>
+              <a class="button button-primary" href="https://github.com/forge-context/forge-engineering-context">リポジトリを見る <span>↗</span></a>
+              <a class="button" href="docs/architecture.md">architecture.md を読む <span>→</span></a>
+              <a class="button" href="examples/petclinic/project_context.json">Reference artifacts を確認 <span>→</span></a>
+            </div>
           </div>
-          <div class="cta-actions">
-            <span class="cta-label">根拠と成果物を確認する</span>
-            <a class="button button-primary" href="https://github.com/forge-context/forge-engineering-context">リポジトリを見る <span>↗</span></a>
-            <a class="button" href="docs/architecture.md">architecture.md を読む <span>→</span></a>
-            <a class="button" href="examples/petclinic/project_context.json">Reference artifacts を確認 <span>→</span></a>
+          <div class="contact-window" id="contact">
+            <div><span>FEEDBACK / CONTACT</span><h3>Feedback / Contact</h3></div>
+            <p>この公開ショーケースへのフィードバックや、<br />技術・プロダクトについてのご連絡はこちら。</p>
+            <a class="button" data-contact-link hidden>メールで連絡する <span>↗</span></a>
+            <small data-contact-placeholder>公開連絡先は <code>public-config.js</code> で設定できます。</small>
           </div>
         </div>
       </section>
@@ -347,6 +426,7 @@
       </div>
     </footer>
 
+    <script src="public-config.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

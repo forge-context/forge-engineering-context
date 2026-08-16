@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "forge-engineering-context",
+  "compatibility_date": "2026-08-16",
+  "pages_build_output_dir": "./dist",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ask-forge-demo",
+      "database_id": "f5ac9144-ccac-4c2d-8fae-2592fae8046f",
+      "preview_database_id": "DB",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "BAILIAN_BASE_URL": "https://ws-6ybnvi0o8c7sc93j.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+    "BAILIAN_MODEL": "qwen3.7-plus",
+    "GLOBAL_DAILY_REQUEST_LIMIT": "300",
+    "GLOBAL_DAILY_TOKEN_LIMIT": "300000",
+    "GLOBAL_TOKEN_RESERVATION": "8000",
+    "CLIENT_HOURLY_REQUEST_LIMIT": "10",
+    "CLIENT_DAILY_REQUEST_LIMIT": "30"
+  }
+}

@@ -1,0 +1,12 @@
+# Copy this file to .dev.vars and set the Bailian values for local Pages development.
+# Do not commit .dev.vars or place a real API key in this example file.
+BAILIAN_API_KEY=
+BAILIAN_BASE_URL=
+BAILIAN_MODEL=qwen3.7-plus
+GLOBAL_DAILY_REQUEST_LIMIT=300
+GLOBAL_DAILY_TOKEN_LIMIT=300000
+GLOBAL_TOKEN_RESERVATION=8000
+CLIENT_HOURLY_REQUEST_LIMIT=10
+CLIENT_DAILY_REQUEST_LIMIT=30
+# Recommended in Cloudflare as an additional secret. Falls back to BAILIAN_API_KEY locally.
+CLIENT_HASH_SALT=

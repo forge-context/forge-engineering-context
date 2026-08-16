@@ -2,7 +2,7 @@
 
 Forge は、Coding Agent がコードの変更を始める前に、実装に必要なコンテキストを整えます。人間の権限で判断すべき実装上の論点を、暗黙の前提として処理せず、明示的に扱えるようにします。
 
-> **状況:** 初期段階の公開コンセプトショーケースです。本リポジトリには、具体的なリファレンスケースと、人手で整理したサンプル成果物を収録しています。完全に実行可能な Forge の実装や本番システムではなく、[アーキテクチャ](docs/architecture.md)に記載したすべての構成要素が実装済みであることを示すものでもありません。
+> **状況:** 初期段階の公開コンセプトショーケースです。本リポジトリには、具体的なリファレンスケース、人手で整理したサンプル成果物、および一つの要件だけを扱う Ask Forge 公開 Demo を収録しています。一般のリポジトリを調査する完全な Forge 実装や本番システムではありません。
 
 ---
 
@@ -72,7 +72,7 @@ Forge は、大きく二種類のコンテキストを分離します。
 - 時間が経過しても比較的安定している**プロジェクト**のコンテキスト
 - **特定の要件**に関するコンテキスト。対象となる実装範囲、根拠、そのタスクだけに関係する未解決事項
 
-コンセプト設計では、自由生成ではなく、grep に近い構造検索による決定論的・字句的なコード調査を重視します。調査結果から情報源を追跡できる必要があるためです。対象範囲が広がった場合、関連するプロジェクトコンテキストへ到達する方法として、ハイブリッド検索や検索拡張型の手法も将来の候補になります。本公開リポジトリには、実行可能な調査パイプラインは含まれていません。
+コンセプト設計では、自由生成ではなく、grep に近い構造検索による決定論的・字句的なコード調査を重視します。調査結果から情報源を追跡できる必要があるためです。対象範囲が広がった場合、関連するプロジェクトコンテキストへ到達する方法として、ハイブリッド検索や検索拡張型の手法も将来の候補になります。現在実行できる Ask Forge Demo は、検証済み Artifact に対する決定論的な bounded retrieval に限られ、リポジトリ調査パイプラインは含みません。
 
 詳細は [docs/architecture.md](docs/architecture.md) を参照してください。本番向けの詳細実装と内部評価手法は、この公開ショーケースの対象外です。
 
@@ -94,6 +94,10 @@ Forge は、大きく二種類のコンテキストを分離します。
 README.md
 docs/
   architecture.md          — コンセプトアーキテクチャの詳細
+  ask-forge-operations.md  — 公開 Demo のローカル運用と Cloudflare 設定
+functions/
+  api/ask.js               — Pages Function の POST /api/ask
+migrations/                — D1 の利用量・監査テーブル
 examples/
   petclinic/
     requirement.md              — 要件例
@@ -101,3 +105,16 @@ examples/
     gaps.json                   — 合意前の、人間の権限による判断事項
     implementation_package.json — 判断後の引き継ぎ情報
 ```
+
+## Ask Forge をローカルで動かす
+
+`.dev.vars.example` を `.dev.vars` にコピーし、`BAILIAN_API_KEY`、`BAILIAN_BASE_URL`、`BAILIAN_MODEL` を設定します。秘密を含む `.dev.vars` は Git の対象外です。
+
+```sh
+npm install
+npm run build
+npm run db:migrate:local
+npm run dev
+```
+
+別のターミナルから `POST http://localhost:8788/api/ask` を呼び出せます。詳しい request 例、予算、D1、Cloudflare Pages の手動設定は [docs/ask-forge-operations.md](docs/ask-forge-operations.md) にあります。実 API を使わないテストは `npm test`、既存の任意 Live smoke test は `npm run test:live` です。
