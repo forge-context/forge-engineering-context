@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.1",
+  "artifact_stage": "post_alignment",
+  "provenance": "curated_showcase",
+  "requirement_id": "same-day-visit",
+  "requirement_ref": "requirement.md",
+  "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "conflicts": [],
+  "status": "implementation_ready",
+  "approved_target": "診療予約の登録可能範囲を「翌日以降」から「当日以降」へ変更します。過去日は引き続き拒否します。新規 Visit フォームの初期日付は翌日のまま変更しません。",
+  "human_decisions": [
+    {
+      "gap_ref": "gap.past_date_policy",
+      "decided_by": "human_alignment",
+      "decision": {
+        "allowed_range": "当日以降のみ許可する",
+        "past_dates": "引き続き拒否する",
+        "boundary_semantics": "入力日が当日より前の場合にのみ拒否する"
+      },
+      "basis": {
+        "allowed_range": "human_decision — 当日と過去日は現在ひとつの条件でまとめて拒否されており、どちらを緩めるかはコードから導けないため、判断者が決定",
+        "past_dates": "human_decision — 過去日を投入している既存の seed data は、利用者による過去日登録を認める根拠にはならないと判断",
+        "boundary_semantics": "承認された許可範囲から導かれる境界の表現であり、新たな判断ではない"
+      }
+    },
+    {
+      "gap_ref": "gap.default_visit_date",
+      "decided_by": "human_alignment",
+      "decision": {
+        "default_date": "翌日のまま維持する"
+      },
+      "basis": {
+        "default_date": "human_decision — 当日を選択可能にすることと、当日を既定として提示することは別の判断であり、今回は初期表示値を変更しないと決定"
+      }
+    }
+  ],
+  "authority_boundary_applied": {
+    "blocking_human_decisions": 2,
+    "non_blocking_verifications": 1,
+    "derived_implementation_impacts": 3,
+    "note": "実装方法の選択（minVisitDate、message key、i18n）は人の判断に昇格させず、承認された振る舞いから導かれる実装上の影響として下記に記載しています。"
+  },
+  "implementation_surfaces": [
+    {
+      "surface_ref": "surface.controller.visit_date_rule",
+      "change": "processNewVisitForm の日付検証を、当日を許可し当日より前だけを拒否する形に変更します。現在の !getDate().isAfter(LocalDate.now()) は当日も拒否するため、当日を含む比較へ置き換えます。拒否時の対象フィールドは date のまま変更しません。Service 層は追加せず、既存フローと同様に Controller から Repository を直接呼び出します。"
+    },
+    {
+      "surface_ref": "surface.model.visit_default_date",
+      "change": "変更なし — 人の判断により、既定コンストラクタの初期値は翌日のまま維持します。"
+    },
+    {
+      "surface_ref": "surface.ui.visit_form_min_date",
+      "change": "minVisitDate が返す下限値を、承認された許可範囲に合わせて当日へ変更します。この値は共有フラグメント fragments/inputField.html の date 分岐を経由するため、実装時に Pet の生年月日入力欄への影響有無を確認します。固定リビジョンでは PetController が minVisitDate を公開していないため、現状その入力欄に min は出力されていません。この前提が変わらないことを確認したうえで、変更を診療予約フォームに閉じ込めます。",
+      "derived_from": "impact.min_visit_date"
+    },
+    {
+      "surface_ref": "surface.i18n.visit_date_message",
+      "change": "過去日の拒否は残るため、拒否メッセージ自体は維持します。「未来の日付である必要があります」という現在の文言は承認後の振る舞いと一致しなくなるため、当日を含む表現へ更新します。既存キーを再利用するか新設するかは実装時に確定してよく、いずれの場合も全ロケールで文言の整合を取ります。",
+      "derived_from": ["impact.message_key", "impact.i18n_propagation"]
+    },
+    {
+      "surface_ref": "surface.test.visit_controller",
+      "change": "当日が許可されるようになったため、当日を拒否として検証している既存テストの意図を反転させ、境界に対する検証を追加します。",
+      "test_intents": [
+        "当日の日付：登録が成功し、飼い主詳細へリダイレクトされる",
+        "前日の日付：date フィールドのエラーで拒否され、フォームへ戻る",
+        "翌日の日付：引き続き登録が成功する（既存の成功パスの回帰確認）",
+        "新規 Visit フォームの初期日付が翌日のままであることを確認する",
+        "メッセージキーを新設した場合、en を除く全ロケールに存在することを I18nPropertiesSyncTest で確認する"
+      ]
+    },
+    {
+      "surface_ref": "surface.persistence.visits_table",
+      "change": "変更なし — visit_date は制約のない DATE 列で、スキーマ変更は不要です。"
+    }
+  ],
+  "delegated_verifications": [
+    {
+      "verification_ref": "verification.same_day_boundary_timezone",
+      "handling": "実装および QA で確認します。人の判断待ちではないため、この要件の実装開始を妨げません。",
+      "escalation_condition": "複数タイムゾーンでの運用、または営業時間による予約可否が求められた場合は、別要件として人の判断を求めます。"
+    }
+  ],
+  "handoff_note": "この人手で整理した合意後パッケージは、Coding Agent への入力を想定しています。許可範囲（当日以降・過去日は拒否）と初期日付（翌日のまま維持）は上記 human_decisions に従って決定済みであり、再推論しません。minVisitDate の反映方法、メッセージキーの再利用可否、多言語への反映方法は、承認された振る舞いから導かれる実装判断として Coding Agent に委ねます。共有フラグメント経由の影響確認と、タイムゾーンの検証は実装時の確認事項です。"
+}

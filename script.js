@@ -180,24 +180,58 @@ if (askForge) {
     count.textContent = `${[...question.value].length} / 500`;
   };
 
-  const artifactPaths = {
-    "project_context.json": "examples/petclinic/project_context.json",
-    "gaps.json": "examples/petclinic/gaps.json",
-    "implementation_package.json": "examples/petclinic/implementation_package.json",
+  // Public requirement registry, mirroring the server-side one. The id is the only
+  // value sent to the API; the base path is used to render Evidence cards locally.
+  const requirements = {
+    "owner-city-search": {
+      basePath: "examples/petclinic",
+      note: "既存の姓検索に、市区町村の条件を追加する要件です。",
+      presets: [
+        "現在の検索はどう動いていますか？",
+        "この要件はどこに影響しますか？",
+        "実装前に人が決める必要があることは何ですか？",
+        "なぜ city の照合方法を Forge は自動で決めなかったのですか？",
+        "Human Alignment 後、Coding Agent には何を渡せますか？",
+      ],
+    },
+    "same-day-visit": {
+      basePath: "examples/petclinic-same-day-visit",
+      note: "翌日以降しか受け付けない診療予約を、当日にも広げる要件です。",
+      presets: [
+        "現在の診療予約はどう動いていますか？",
+        "この要件はどこに影響しますか？",
+        "実装前に人が決める必要があることは何ですか？",
+        "なぜ過去日の扱いを Forge は自動で決めなかったのですか？",
+        "Human Alignment 後、Coding Agent には何を渡せますか？",
+      ],
+    },
   };
+
+  const picker = document.querySelector("[data-requirement-picker]");
+  const requirementTabs = picker ? [...picker.querySelectorAll("[data-requirement]")] : [];
+  const requirementNote = picker?.querySelector("[data-requirement-note]");
+  const presetList = askForge.querySelector("[data-preset-list]");
+  let activeRequirement = requirementTabs[0]?.dataset.requirement || "owner-city-search";
+
+  const artifactNames = ["project_context.json", "gaps.json", "implementation_package.json"];
+  // Keyed by requirement as well as source: the same filename resolves to different
+  // evidence for each requirement, so a shared key would render the wrong artifact.
   const artifactCache = new Map();
 
   const loadArtifact = async (source) => {
-    if (!artifactPaths[source]) return null;
-    if (!artifactCache.has(source)) {
+    if (!artifactNames.includes(source)) return null;
+    const base = requirements[activeRequirement]?.basePath;
+    if (!base) return null;
+    const key = `${activeRequirement}:${source}`;
+    if (!artifactCache.has(key)) {
       artifactCache.set(
-        source,
-        fetch(artifactPaths[source])
+        key,
+        fetch(`${base}/${source}`)
           .then((response) => (response.ok ? response.json() : null))
           .catch(() => null),
       );
     }
-    return artifactCache.get(source);
+    return artifactCache.get(key);
   };
 
   const humanizeIdentifier = (value) => String(value || "")
@@ -381,13 +415,59 @@ if (askForge) {
     sources.textContent = (Array.isArray(data.retrieved_sources) ? data.retrieved_sources : []).join(", ");
   };
 
-  askForge.querySelectorAll("[data-preset]").forEach((preset) => {
-    preset.addEventListener("click", () => {
-      question.value = preset.textContent.trim();
+  const renderPresets = () => {
+    presetList.replaceChildren();
+    (requirements[activeRequirement]?.presets || []).forEach((text) => {
+      const preset = document.createElement("button");
+      preset.type = "button";
+      preset.dataset.preset = "";
+      preset.textContent = text;
+      preset.addEventListener("click", () => {
+        question.value = text;
+        updateCount();
+        question.focus();
+      });
+      presetList.append(preset);
+    });
+  };
+
+  const activateRequirement = (id) => {
+    if (!requirements[id]) return;
+    const changed = id !== activeRequirement;
+    activeRequirement = id;
+    requirementTabs.forEach((tab) => {
+      const active = tab.dataset.requirement === id;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+    });
+    if (requirementNote) requirementNote.textContent = requirements[id].note || "";
+    renderPresets();
+    if (changed) {
+      // A previous answer was grounded in the other requirement's artifacts, so it
+      // is cleared rather than left on screen under a new active requirement.
+      question.value = "";
       updateCount();
-      question.focus();
+      resultBox.hidden = true;
+      errorBox.hidden = true;
+      empty.hidden = false;
+    }
+  };
+
+  requirementTabs.forEach((tab, position) => {
+    tab.addEventListener("click", () => activateRequirement(tab.dataset.requirement));
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "ArrowRight"
+        ? (position + 1) % requirementTabs.length
+        : (position - 1 + requirementTabs.length) % requirementTabs.length;
+      activateRequirement(requirementTabs[next].dataset.requirement);
+      requirementTabs[next].focus();
     });
   });
+
+  activateRequirement(activeRequirement);
 
   question.addEventListener("input", updateCount);
   form.addEventListener("submit", async (event) => {
@@ -406,7 +486,7 @@ if (askForge) {
       const response = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requirement_id: "owner-city-search", question: text }),
+        body: JSON.stringify({ requirement_id: activeRequirement, question: text }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {

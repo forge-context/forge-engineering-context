@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.1",
+  "artifact_stage": "investigation",
+  "provenance": "curated_showcase",
+  "requirement_id": "same-day-visit",
+  "requirement_ref": "requirement.md",
+  "reference_project": "spring-petclinic（公開参照用・簡略版）",
+  "reference_repository": "https://github.com/spring-projects/spring-petclinic",
+  "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "note": "説明用に簡略化しており、アプリケーション全体を表すものではありません。以下の根拠はすべて reference_revision に固定しています。",
+  "observed_current_behavior": {
+    "summary": "診療予約の日付は、当日を含む「未来でない日付」が拒否されます。つまり登録できるのは翌日以降だけです。この規則は 1 か所にまとまっておらず、Controller の検証、エンティティの既定値、フォームの min 属性、エラーメッセージの 4 か所に分かれて存在します。",
+    "evidence_refs": [
+      "surface.controller.visit_date_rule",
+      "surface.model.visit_default_date",
+      "surface.ui.visit_form_min_date",
+      "surface.i18n.visit_date_message"
+    ]
+  },
+  "relevant_implementation_surfaces": [
+    {
+      "id": "surface.controller.visit_date_rule",
+      "layer": "Controller",
+      "description": "診療予約の登録を処理する Controller メソッドです。ここに「翌日以降のみ」を強制する唯一の実際の検証があります。入力日が当日以前の場合、date フィールドを typeMismatch.visitDate として拒否します。この要件で振る舞いを変える中心的な箇所です。",
+      "evidence": {
+        "type": "controller_method",
+        "path": "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+        "symbol": "processNewVisitForm",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/java/org/springframework/samples/petclinic/owner/VisitController.java",
+        "note": "!visit.getDate().isAfter(LocalDate.now()) が真のとき result.rejectValue(\"date\", \"typeMismatch.visitDate\") を呼びます。isAfter は厳密な比較のため、当日は拒否されます。Service 層はなく、Controller が OwnerRepository を直接呼び出します。"
+      }
+    },
+    {
+      "id": "surface.model.visit_default_date",
+      "layer": "Model / Entity",
+      "description": "Visit エンティティの既定コンストラクタが、日付の初期値を翌日に設定します。これは検証とは独立した別の箇所であり、フォームの初期表示値を決めます。検証を緩めても、この既定値は自動的には変わりません。",
+      "evidence": {
+        "type": "class",
+        "path": "src/main/java/org/springframework/samples/petclinic/owner/Visit.java",
+        "symbol": "Visit",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/java/org/springframework/samples/petclinic/owner/Visit.java",
+        "note": "コンストラクタに this.date = LocalDate.now().plusDays(1) があります。date は時刻を持たない LocalDate で、@Column(name = \"visit_date\") に対応します。"
+      }
+    },
+    {
+      "id": "surface.ui.visit_form_min_date",
+      "layer": "UI",
+      "description": "フォームの日付入力欄に下限値を与える経路です。VisitController が minVisitDate を翌日として公開し、共有フラグメントの date 分岐がそれを th:min に適用します。この共有フラグメントは Pet の生年月日入力欄でも使われるため、変更の影響は診療予約フォームだけに閉じません。",
+      "evidence": {
+        "type": "template",
+        "path": "src/main/resources/templates/fragments/inputField.html",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/resources/templates/fragments/inputField.html",
+        "note": "th:case=\"'date'\" の入力欄が th:min=\"${minVisitDate}\" を持ちます。値は VisitController の @ModelAttribute(\"minVisitDate\") が返す LocalDate.now().plusDays(1) です。同じフラグメントの同じ分岐を createOrUpdatePetForm.html が birthDate に使用しますが、PetController は minVisitDate を公開しないため、そちらでは min が出力されません。createOrUpdateVisitForm.html は minVisitDate を直接参照しません。"
+      }
+    },
+    {
+      "id": "surface.i18n.visit_date_message",
+      "layer": "i18n",
+      "description": "拒否時に表示されるメッセージです。「未来の日付である必要があります」という文言が、現在の規則を利用者向けに表現しています。当日を許可すると、この文言は現在の振る舞いと一致しなくなります。",
+      "evidence": {
+        "type": "message_bundle",
+        "path": "src/main/resources/messages/messages.properties",
+        "symbol": "typeMismatch.visitDate",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/resources/messages/messages.properties",
+        "note": "既定値は typeMismatch.visitDate=Visit date must be in the future です。同じキーが de, es, fa, hi, ja, ko, pt, ru, tr の各ロケールにも存在します（messages_en.properties は既定へのフォールバックのため意図的に空です）。"
+      }
+    },
+    {
+      "id": "surface.test.visit_controller",
+      "layer": "Test",
+      "description": "診療予約フローの Controller レベルのテストです。当日の日付が拒否されることを直接検証しているテストが既に存在するため、この要件では既存テストの意図そのものが変更対象になります。",
+      "evidence": {
+        "type": "test_class",
+        "path": "src/test/java/org/springframework/samples/petclinic/owner/VisitControllerTests.java",
+        "symbol": "VisitControllerTests",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/test/java/org/springframework/samples/petclinic/owner/VisitControllerTests.java",
+        "note": "processNewVisitFormHasErrorsWhenVisitDateIsNotInFuture は LocalDate.now() を送信し、date フィールドに typeMismatch.visitDate のエラーコードが付くことを表明します。processNewVisitFormSuccess は LocalDate.now().plusDays(1) を送信します。別途 I18nPropertiesSyncTest が、messages.properties の全キーが en 以外の全ロケールに存在することを検証します。"
+      }
+    },
+    {
+      "id": "surface.persistence.visits_table",
+      "layer": "Database",
+      "description": "診療予約の保存先です。日付列に制約はなく、現在の「翌日以降のみ」という規則はアプリケーション層だけで成立しています。この要件によるスキーマ変更は必要ありません。",
+      "evidence": {
+        "type": "schema",
+        "path": "src/main/resources/db/h2/schema.sql",
+        "source": "https://github.com/spring-projects/spring-petclinic/blob/88e37c15cf6fc8490b01bc3e8e2c800cec1ac272/src/main/resources/db/h2/schema.sql",
+        "note": "visits.visit_date は制約のない DATE 列です。同じリビジョンの MySQL および PostgreSQL 用スキーマも同様で、CHECK 制約はありません。同梱の db/h2/data.sql は '2013-01-01' などの過去日を投入しており、データベース自体は過去日を受け入れることが確認できます。"
+      }
+    }
+  ]
+}

@@ -305,12 +305,13 @@
             <a class="package-link" href="examples/petclinic/implementation_package.json">implementation_package.json を見る <span>↗</span></a>
           </div>
 
-          <p class="reference-summary">このケースでは 3 件の未決定事項を確認し、既存 Context 間の Conflict は検出されませんでした。</p>
+          <p class="reference-summary">このケースでは 3 件の未決定事項を確認し、既存 Context 間の Conflict は検出されませんでした。同じ PetClinic に対する 2 件目の検証済み要件「当日の診療予約を登録できるようにする」では、承認される振る舞いを変える判断 2 件だけを未決定事項とし、実装方法の選択と、実装を妨げない検証事項は分けて記録しています。</p>
 
           <div class="text-links" aria-label="リファレンスリンク">
             <a href="README.md">README <span>↗</span></a>
             <a href="docs/architecture.md">architecture.md <span>↗</span></a>
-            <a href="examples/petclinic/requirement.md">PetClinic artifacts <span>↗</span></a>
+            <a href="examples/petclinic/requirement.md">PetClinic artifacts / 市区町村検索 <span>↗</span></a>
+            <a href="examples/petclinic-same-day-visit/requirement.md">PetClinic artifacts / 当日予約 <span>↗</span></a>
             <a href="https://github.com/forge-context/forge-engineering-context">GitHub repository <span>↗</span></a>
           </div>
         </div>
@@ -326,22 +327,24 @@
             <p class="heading-note"><b>BOUNDED PUBLIC DEMO</b><br />公開済みの構造化 Artifact だけを、最大 2 ソースまで参照します。一般的な PetClinic の知識では補いません。</p>
           </div>
 
-          <div class="ask-requirement">
+          <div class="ask-requirement" data-requirement-picker>
             <span>ACTIVE REQUIREMENT</span>
-            <div><b>飼い主検索に市区町村の条件を追加する</b><code>owner-city-search</code></div>
+            <div class="requirement-tabs" role="tablist" aria-label="確認する要件を選ぶ">
+              <button type="button" role="tab" data-requirement="owner-city-search">
+                <b>飼い主検索に市区町村の条件を追加する</b><code>owner-city-search</code>
+              </button>
+              <button type="button" role="tab" data-requirement="same-day-visit">
+                <b>当日の診療予約を登録できるようにする</b><code>same-day-visit</code>
+              </button>
+            </div>
+            <p class="requirement-note" data-requirement-note></p>
           </div>
 
           <div class="ask-layout" data-ask-forge>
             <form class="ask-form" data-ask-form>
               <fieldset>
                 <legend>確認する質問を選ぶ</legend>
-                <div class="preset-list">
-                  <button type="button" data-preset>現在の検索はどう動いていますか？</button>
-                  <button type="button" data-preset>この要件はどこに影響しますか？</button>
-                  <button type="button" data-preset>実装前に人が決める必要があることは何ですか？</button>
-                  <button type="button" data-preset>なぜ city の照合方法を Forge は自動で決めなかったのですか？</button>
-                  <button type="button" data-preset>Human Alignment 後、Coding Agent には何を渡せますか？</button>
-                </div>
+                <div class="preset-list" data-preset-list></div>
               </fieldset>
               <label for="ask-question">または、要件について質問する</label>
               <textarea id="ask-question" data-ask-question maxlength="500" rows="4" placeholder="この要件について確認したいことを入力してください。"></textarea>

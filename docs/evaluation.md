@@ -1,6 +1,6 @@
 # Ask Forge — Evaluation
 
-このドキュメントは、公開 Demo の Ask Forge に対して実施した検証内容と、そこで確認できた事実だけをまとめたものです。一般的な Benchmark ではなく、`owner-city-search` という単一要件に絞った targeted evaluation です。記載する数値は、すべて実際に観測した結果です。
+このドキュメントは、公開 Demo の Ask Forge に対して実施した検証内容と、そこで確認できた事実だけをまとめたものです。一般的な Benchmark ではなく、`owner-city-search` という単一要件に絞った targeted evaluation です。記載する数値は、すべて実際に観測した結果です。公開 Demo にはその後 `same-day-visit` を追加していますが、本ドキュメントの測定対象には含みません。
 
 ## A. 何を評価しているか
 
@@ -81,7 +81,7 @@ out-of-scope の判定は決定論的な scope gate で行うため、model を�
 
 この evaluation の適用範囲は限定的です。
 
-- **Validated requirement は現在 1 件** — `owner-city-search` のみです。
+- **この evaluation の対象は `owner-city-search` 1 件** — 公開 Demo は `owner-city-search` と `same-day-visit` の 2 件を提供していますが、本ドキュメントに記載した測定結果はすべて `owner-city-search` に対して観測したものです。`same-day-visit` は同じ retrieval 経路と guardrail を通りますが、この evaluation では測定していません。
 - **Artifact は curated** — 人手で整理した固定 Artifact を対象としており、自動生成された Context ではありません。
 - **Vector DB / Embedding は未使用** — 現在の retrieval は route から primary source への決定論的 mapping です。
 - **公開 Demo に general repository ingestion は含まれない** — 任意のリポジトリを調査するパイプラインは対象外です。

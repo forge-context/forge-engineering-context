@@ -4,7 +4,7 @@
 
 ## Ask Forge Public Demo v0.1
 
-公開 Demo は `owner-city-search` という一つの検証済み要件に限定し、次の流れを実行します。
+公開 Demo は検証済みの要件に限定し、次の流れを実行します。現在は `owner-city-search`（飼い主検索に市区町村の条件を追加する）と `same-day-visit`（当日の診療予約を登録できるようにする）の 2 件を公開しています。要件はリクエストごとに一つだけ選択し、取得できる Artifact はその要件のものと、要件に依存しない `architecture.md` に限定されます。ある要件の回答が、別の要件の Artifact を参照することはありません。
 
 ```
 要件に限定した質問
@@ -72,7 +72,19 @@ Forge は要件を受け取ると、関連する可能性のある実装範囲�
 - **不明点** — 利用可能な資料だけでは回答できず、追加調査ではなく判断を必要とする問い
 - **矛盾** — 二つの根拠が異なる内容を示している状態
 
-これらを分けることで、「確かな情報が見つからなかった」が暗黙のうちに「一般的な答えを採用した」へ変わることを防ぎます。実際の不明点は [examples/petclinic/gaps.json](../examples/petclinic/gaps.json) を参照してください。
+これらを分けることで、「確かな情報が見つからなかった」が暗黙のうちに「一般的な答えを採用した」へ変わることを防ぎます。実際の不明点は [examples/petclinic/gaps.json](../examples/petclinic/gaps.json) と [examples/petclinic-same-day-visit/gaps.json](../examples/petclinic-same-day-visit/gaps.json) を参照してください。
+
+### 権限の境界
+
+不明点をすべて人間の判断へ送ると、判断待ちの一覧が増えるだけで、決めるべきことが埋もれます。Forge は、人間の判断を止めるべき事項を、**承認される振る舞い（Approved Target）自体を変える判断**だけに限定します。
+
+`gaps.json` は、この境界に沿って三つに分けます。
+
+- **blocking human decision**（`gaps`）— 決めなければ承認される振る舞いが定まらない事項です。これだけが実装開始を止めます。
+- **non-blocking verification**（`non_blocking_verifications`）— 記録すべき事実だが、その要件を実装不能にする具体的根拠がないものです。実装や QA へ委譲し、判断待ちにはしません。前提が崩れた場合の escalation 条件を併記します。
+- **derived implementation impact**（`derived_implementation_impact`）— 承認された振る舞いから一意に導かれる実装上の影響です。実装方法の選択は人間の判断へ昇格させず、引き継ぎ情報として渡します。
+
+「まだ分かっていない」ことは、それ自体では不明点になりません。追加調査で判明する事実は調査項目、実装方法の選択は実装判断、誰かが決めなければならない事項だけが人間の判断です。Ask Forge が Human decision として提示するのは `gaps` の open 項目だけであり、残る二つを判断待ちとして提示することはありません。
 
 ### 人間による合意
 

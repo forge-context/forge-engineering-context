@@ -65,6 +65,18 @@ Forge の処理フローに沿って進めると、次のようになります�
 
 各段階の成果物は [examples/petclinic](examples/petclinic) にあります。[`requirement.md`](examples/petclinic/requirement.md)、[`project_context.json`](examples/petclinic/project_context.json)、[`gaps.json`](examples/petclinic/gaps.json)、[`implementation_package.json`](examples/petclinic/implementation_package.json) を参照してください。データは意図的に簡略化しており、一度に読み通せることを優先しています。アプリケーション全体を表すものではありません。`gaps.json` は合意前のスナップショット、`implementation_package.json` は未解決事項を決定した後の合意後スナップショットです。このリファレンスケースでは不明点が見つかりましたが、根拠間の矛盾はありませんでした。
 
+**2 件目の要件例:** *当日の診療予約も登録できるようにする。*（[examples/petclinic-same-day-visit](examples/petclinic-same-day-visit)）
+
+同じ固定リビジョンに対する 2 件目の検証済み要件です。1 件目が「存在するが使われていないフィールドを検索条件に足す」追加型だったのに対し、こちらは**すでに明示的に実装されている制約を緩める**変更です。固定リビジョンでは「翌日以降のみ」という規則が、Controller の検証、`Visit` の既定値、フォームの `min` 属性、エラーメッセージの 4 か所に分かれて存在します。
+
+この要件では、権限の境界を次のように適用しています。
+
+- **人間の判断を要する未解決事項は 2 件だけ** — 過去日を引き続き禁止するか、初期日付を翌日のままにするか。どちらも承認される振る舞い自体を変える判断です。
+- **実装方法の選択は未解決事項にしない** — `minVisitDate` の反映方法、メッセージキーを再利用するか新設するか、多言語への反映方法は、承認された振る舞いから導かれる実装上の影響として記録します。
+- **実装を妨げない事項は判断待ちにしない** — 「当日」の判定に使うタイムゾーンは記録すべき事実ですが、この要件を実装不能にする根拠が確認できないため、委譲可能な検証事項として扱い、escalation 条件を併記します。
+
+「まだ分かっていない」ことをそのまま未解決事項にすると、判断待ちの一覧が増えるだけで、決めるべきことが埋もれます。詳細は [docs/architecture.md](docs/architecture.md) の「権限の境界」を参照してください。
+
 ## 4. アーキテクチャ / 技術方針
 
 Forge は、大きく二種類のコンテキストを分離します。

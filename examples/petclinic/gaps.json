@@ -1,14 +1,25 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "artifact_stage": "pre_alignment",
   "provenance": "curated_showcase",
+  "requirement_id": "owner-city-search",
   "requirement_ref": "requirement.md",
   "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "authority_boundary": {
+    "rule": "gaps に記録するのは、承認される振る舞い（Approved Target）自体を変える判断だけです。",
+    "excluded": [
+      "根拠が未確認というだけの事項は、Gap ではなく調査項目として扱います。",
+      "実装方法の選択は、承認された振る舞いから導かれる実装上の影響として扱い、人の判断に昇格させません。",
+      "この要件を実装不能にする具体的根拠がない事項は、blocking な Gap ではなく、委譲可能な検証事項として扱います。"
+    ]
+  },
   "conflicts": [],
   "gaps": [
     {
       "id": "gap.city_matching_semantics",
       "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
       "question": "新しい市区町村条件は、ユーザーが入力した値とどのように照合するか。",
       "observed_existing_behavior": {
         "description": "既存の姓検索は前方一致（starts with）を使用します。Controller が直接呼び出す OwnerRepository.findByLastNameStartingWith というメソッド名から確認できます。",
@@ -41,6 +52,8 @@
     {
       "id": "gap.search_criteria_combination",
       "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
       "question": "市区町村条件を既存の姓条件とどのように組み合わせるか。一方または両方の値が空の場合を含む。",
       "observed_existing_behavior": {
         "description": "現在、空の姓は空文字列として扱われ、すべての飼い主に一致します。Controller のコメントには、引数なしのリクエストですべてのレコードを返すことが明記されています。現在は二つ目の条件がないため、複数の検索条件を組み合わせる既存例はありません。",
@@ -69,6 +82,8 @@
     {
       "id": "gap.no_result_error_placement",
       "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
       "question": "姓、市区町村、またはその両方で飼い主を検索できる場合、検索結果なしのエラーをどこに関連付けるか。",
       "observed_existing_behavior": {
         "description": "現在の単一条件のフローでは、notFound エラーを lastName に関連付けます。条件が二つになると、検索結果が空であっても、どちらか一方のフィールドが不正であるとは断定できません。",

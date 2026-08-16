@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.1",
+  "artifact_stage": "pre_alignment",
+  "provenance": "curated_showcase",
+  "requirement_id": "same-day-visit",
+  "requirement_ref": "requirement.md",
+  "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+  "authority_boundary": {
+    "rule": "gaps に記録するのは、承認される振る舞い（Approved Target）自体を変える判断だけです。",
+    "excluded": [
+      "根拠が未確認というだけの事項は、Gap ではなく調査項目として扱います。",
+      "実装方法の選択は、承認された振る舞いから導かれる実装上の影響として扱い、人の判断に昇格させません。",
+      "この要件を実装不能にする具体的根拠がない事項は、blocking な Gap ではなく、委譲可能な検証事項として扱います。"
+    ]
+  },
+  "conflicts": [],
+  "gaps": [
+    {
+      "id": "gap.past_date_policy",
+      "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
+      "question": "当日の診療予約を許可したあとも、過去日は引き続き禁止するか。",
+      "observed_existing_behavior": {
+        "description": "現在は一つの条件 !isAfter(LocalDate.now()) が、当日と過去日をまとめて拒否しています。過去日だけを個別に扱う規則はコードベースに存在しません。",
+        "evidence_ref": "project_context.json#surface.controller.visit_date_rule"
+      },
+      "why_not_resolved_automatically": "現在の実装は当日と過去日を単一の条件で同時に拒否しているため、「当日を許可する」という要件から過去日の扱いは導けません。両者を区別する意図を示す根拠は、固定リビジョンのコードベースにありません。境界をどこへ動かすかは、記録できる診療実績の範囲に関わる製品判断です。",
+      "candidate_options": [
+        {
+          "option": "当日以降のみ許可（過去日は引き続き禁止）",
+          "status": "closest to observed behavior",
+          "rationale": "現在の「未来方向のみ」という方針を保ったまま、境界を 1 日だけ緩めます。ただし、これが意図された方針である根拠は確認できていません。"
+        },
+        {
+          "option": "過去日も許可（日付制約を撤廃）",
+          "status": "not observed in codebase",
+          "rationale": "実施済みの診療を後から記録する用途には合いますが、現在の Controller にその前例はありません。"
+        }
+      ],
+      "also_unresolved": [
+        "同梱の db/h2/data.sql は '2013-01-01' などの過去日を投入しており、データベースと既存データは過去日を受け入れます。ただしこれは投入データの事実であって、利用者が過去日を登録してよいという製品判断の根拠にはなりません。"
+      ],
+      "status": "open",
+      "resolution": null
+    },
+    {
+      "id": "gap.default_visit_date",
+      "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
+      "question": "新規 Visit フォームの初期日付を、翌日のままにするか、当日に変更するか。",
+      "observed_existing_behavior": {
+        "description": "Visit の既定コンストラクタが日付を翌日に設定します。これは Controller の検証とは独立した別の箇所で、フォームの初期表示値を決めます。",
+        "evidence_ref": "project_context.json#surface.model.visit_default_date"
+      },
+      "why_not_resolved_automatically": "検証を緩めることと、初期値を変えることは独立しています。要件は当日の登録を「できるようにする」とだけ述べており、当日を既定として提示すべきかどうかは導けません。利用者が最初に目にする日付が変わるため、これは観測可能な振る舞いの変更です。",
+      "candidate_options": [
+        {
+          "option": "翌日のまま維持する",
+          "status": "current observed default",
+          "rationale": "当日は選べるが既定では提示しない、という形になります。現在の既定値をそのまま保ちます。"
+        },
+        {
+          "option": "当日に変更する",
+          "status": "not observed in codebase",
+          "rationale": "当日予約を主要な用途とみなす場合に合いますが、現在の既定値を変更することになります。"
+        }
+      ],
+      "also_unresolved": [
+        "ClinicServiceTests.shouldAddNewVisitForPet は new Visit() の既定値をそのまま使用しており、既定値を変更した場合はこのテストが検証している日付の意味も変わります。"
+      ],
+      "status": "open",
+      "resolution": null
+    }
+  ],
+  "non_blocking_verifications": [
+    {
+      "id": "verification.same_day_boundary_timezone",
+      "authority_class": "non_blocking_verification",
+      "blocks_approved_target": false,
+      "delegatable": true,
+      "topic": "「当日」の判定に使うタイムゾーンと、営業時間の扱い。",
+      "observed_existing_behavior": {
+        "description": "visit_date は時刻を持たない DATE 列で、Visit.date は LocalDate です。当日の判定はサーバーの LocalDate.now()（システム既定タイムゾーン）に依存します。タイムゾーン指定や営業時間の概念は、固定リビジョンのコードベースに存在しません。",
+        "evidence_ref": "project_context.json#surface.persistence.visits_table"
+      },
+      "why_not_blocking": "現在の検証も既定値も同じ LocalDate.now() に依存しており、この要件が新しい時刻依存を持ち込むわけではありません。境界が 1 日ずれる条件は、この要件の前後で変わりません。この要件を実装不能にする具体的な根拠は確認できていないため、人の判断待ちにはしません。",
+      "delegated_to": "implementation_and_qa_verification",
+      "verification_intent": [
+        "デプロイ環境のシステム既定タイムゾーンが、クリニックの営業日と一致することを確認する。",
+        "日付境界付近での登録可否が、承認された方針どおりであることを確認する。"
+      ],
+      "escalation_condition": "複数タイムゾーンでの運用が判明した場合、または営業時間による予約可否が求められた場合は、この要件とは別の要件として扱い、あらためて人の判断を求めます。",
+      "status": "open_non_blocking"
+    }
+  ],
+  "derived_implementation_impact": [
+    {
+      "id": "impact.min_visit_date",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.past_date_policy"],
+      "topic": "フォームの日付下限（minVisitDate）の実装方法。",
+      "rationale": "下限値は、承認された許可範囲をそのまま反映するだけです。許可範囲が決まれば実装は一意に導かれるため、独立した判断にはしません。",
+      "evidence_ref": "project_context.json#surface.ui.visit_form_min_date",
+      "handoff_note": "共有フラグメント fragments/inputField.html を経由するため、Pet の生年月日入力欄への影響有無を実装時に確認する必要があります。"
+    },
+    {
+      "id": "impact.message_key",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.past_date_policy"],
+      "topic": "エラーメッセージについて、既存の typeMismatch.visitDate を再利用するか新設するか。",
+      "rationale": "文言は、承認された許可範囲を利用者向けに言い換えたものです。キーを再利用するか新設するかは表現手段の選択であり、振る舞いを変えません。",
+      "evidence_ref": "project_context.json#surface.i18n.visit_date_message",
+      "handoff_note": "過去日を引き続き禁止する場合、拒否メッセージは残りますが「未来の日付」という文言は不正確になります。過去日も許可する場合、この拒否経路自体が不要になります。"
+    },
+    {
+      "id": "impact.i18n_propagation",
+      "not_a_human_decision": true,
+      "derived_from": ["impact.message_key"],
+      "topic": "多言語対応の反映方法。",
+      "rationale": "翻訳の反映は、確定した文言に対する機械的な作業です。",
+      "evidence_ref": "project_context.json#surface.test.visit_controller",
+      "handoff_note": "I18nPropertiesSyncTest が、messages.properties の全キーが en 以外の全ロケールに存在することを検証します。キーを新設する場合は 9 ロケールへの追加が必要で、追加漏れはテスト失敗として検出されます。"
+    }
+  ]
+}

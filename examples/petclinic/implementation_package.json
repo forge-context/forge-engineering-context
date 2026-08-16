@@ -1,11 +1,13 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "artifact_stage": "post_alignment",
   "provenance": "curated_showcase",
+  "requirement_id": "owner-city-search",
   "requirement_ref": "requirement.md",
   "reference_revision": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
   "conflicts": [],
   "status": "implementation_ready",
+  "approved_target": "既存の姓による前方一致検索に、大文字と小文字を区別しない市区町村の前方一致条件を AND で追加します。市区町村だけの検索と、両方が空の検索を許可し、検索結果なしのエラーはフォーム全体に関連付けます。",
   "human_decisions": [
     {
       "gap_ref": "gap.city_matching_semantics",

@@ -1,6 +1,8 @@
 # Ask Forge Public Demo v0.1 — Operations
 
-Ask Forge は Cloudflare Pages の静的 LP に、同一 Origin の `POST /api/ask` を加えた限定公開 Demo です。対応要件は `owner-city-search` だけです。Browser は `requirement_id` と 500 文字以内の `question` だけを送り、モデル、Prompt、Artifact、Endpoint、Token 上限は Pages Function が管理します。
+Ask Forge は Cloudflare Pages の静的 LP に、同一 Origin の `POST /api/ask` を加えた限定公開 Demo です。対応要件は `owner-city-search` と `same-day-visit` の 2 件です。Browser は `requirement_id` と 500 文字以内の `question` だけを送り、モデル、Prompt、Artifact、Endpoint、Token 上限は Pages Function が管理します。`requirement_id` は取得できる Artifact 集合を選択するため、未登録の値は retrieval と budget 予約の前に拒否します。
+
+対応要件の一覧は `scripts/generate_public_artifacts.mjs` の `REQUIREMENTS` が唯一の定義元です。ここに追加すると、生成される `functions/_lib/artifacts.generated.js` を経由して API と retrieval の両方に反映されます。生成時に各 Artifact の `requirement_id` が登録 ID と一致することを検証し、一致しない場合はビルドが失敗します。
 
 ## ローカル実行
 

@@ -1,10 +1,9 @@
 import { ARTIFACTS_REVISION } from "./artifacts.generated.js";
 import { createBailianClient, resolveModel, UpstreamError } from "./bailian.js";
 import { buildCacheKey, createRuntimeCache, CACHE_TTL_SECONDS } from "./cache.js";
-import { PROMPT_VERSION, runRetrieval } from "./retrieval.js";
+import { isKnownRequirement, PROMPT_VERSION, runRetrieval } from "./retrieval.js";
 import { createD1Store } from "./storage.js";
 
-const REQUIREMENT_ID = "owner-city-search";
 const LIMIT_MESSAGE = "本日の Live Ask Forge の利用上限に達しました。公開 Demo と Reference Artifacts は引き続き確認できます。";
 
 function json(body, status = 200) {
@@ -170,7 +169,9 @@ export async function handleAskRequest(request, env, dependencies = {}) {
   questionHash = await sha256(question);
   const trace = baseTrace({ requestId, nowIso, requirementId, questionHash });
 
-  if (requirementId !== REQUIREMENT_ID) {
+  // The requirement id selects which artifact set may be retrieved, so an unknown
+  // id is rejected before any retrieval or budget reservation.
+  if (!isKnownRequirement(requirementId)) {
     await writeAuditSafely(store, trace);
     return json({ request_id: requestId, error: "この公開 Demo では指定された要件を扱えません。" }, 400);
   }
@@ -260,7 +261,7 @@ export async function handleAskRequest(request, env, dependencies = {}) {
   try {
     const client = dependencies.client || createBailianClient(env, dependencies.fetch);
     const retrieval = dependencies.retrieval || runRetrieval;
-    const result = await retrieval(question, client);
+    const result = await retrieval(question, client, requirementId);
     usage = result.usage;
     await store.reconcileGlobalBudget({ usageDate, tokenReservation, usage, nowIso });
     Object.assign(trace, {

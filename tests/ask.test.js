@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { handleAskRequest } from "../functions/_lib/service.js";
 import { runRetrieval } from "../functions/_lib/retrieval.js";
+import { REQUIREMENTS } from "../functions/_lib/artifacts.generated.js";
 
 const ENV = {
   BAILIAN_API_KEY: "test-secret-never-log",
@@ -439,4 +440,141 @@ test("client soft rate limit writes a blocked trace", async () => {
   assert.equal(result.status, 429);
   assert.equal(store.calls.reserve.length, 0);
   assert.equal(store.calls.audit[0].resultStatus, "blocked_rate_limit");
+});
+
+// --- Multi-requirement demo -------------------------------------------------
+// The public demo serves more than one validated requirement. Each requirement
+// must stay isolated: its own artifacts, its own gaps, its own cache entries.
+
+const SAME_DAY = "same-day-visit";
+
+const SAME_DAY_BEHAVIOR_TURN = [
+  { route: "current_behavior", primary_source: "project_context.json", reason: "behavior" },
+  {
+    sufficiency: "sufficient",
+    answer: "現在は翌日以降しか登録できません。",
+    impact_items: [],
+    evidence: ["project_context.json#surface.controller.visit_date_rule"],
+    additional_source: null,
+    additional_reason: null,
+  },
+];
+
+test("a second registered requirement is accepted by the API", async () => {
+  const store = makeStore();
+  const client = scriptedClient([...SAME_DAY_BEHAVIOR_TURN]);
+  const result = await responseJson(await handleAskRequest(
+    makeRequest("現在の予約はどう動いていますか？", SAME_DAY), ENV, { store, client, requestId: "req-same-day" },
+  ));
+  assert.equal(result.status, 200);
+  assert.equal(result.body.route, "current_behavior");
+  assert.equal(store.calls.audit[0].requirementId, SAME_DAY);
+});
+
+test("each requirement reports only its own blocking Human decisions", async () => {
+  const client = scriptedClient([
+    { route: "human_decision", primary_source: "gaps.json", reason: "open decisions" },
+    {
+      sufficiency: "sufficient",
+      answer: "未解決の判断があります。",
+      impact_items: [],
+      evidence: ["gaps.json#gap.past_date_policy"],
+      additional_source: null,
+      additional_reason: null,
+    },
+  ]);
+  const result = await runRetrieval("実装前に人が決める必要があることは何ですか？", client, SAME_DAY);
+  assert.deepEqual(
+    result.humanAuthority.map((item) => item.gap_id),
+    ["gap.past_date_policy", "gap.default_visit_date"],
+  );
+  // The first requirement's gaps must not leak into the second requirement's answer.
+  assert.doesNotMatch(JSON.stringify(result.humanAuthority), /city/i);
+});
+
+test("non-blocking verifications and derived impact are never reported as Human decisions", async () => {
+  const gaps = REQUIREMENTS[SAME_DAY].artifacts["gaps.json"];
+  // Guard the guard: the artifact must actually carry both non-blocking categories,
+  // otherwise this test would pass vacuously.
+  assert.ok(gaps.non_blocking_verifications.length > 0);
+  assert.ok(gaps.derived_implementation_impact.length > 0);
+
+  const client = scriptedClient([
+    { route: "human_decision", primary_source: "gaps.json", reason: "open decisions" },
+    {
+      sufficiency: "sufficient",
+      answer: "未解決の判断があります。",
+      impact_items: [],
+      evidence: ["gaps.json#gap.past_date_policy"],
+      additional_source: null,
+      additional_reason: null,
+    },
+  ]);
+  const result = await runRetrieval("実装前に人が決める必要があることは何ですか？", client, SAME_DAY);
+
+  const reported = result.humanAuthority.map((item) => item.gap_id);
+  const nonBlocking = [
+    ...gaps.non_blocking_verifications.map((item) => item.id),
+    ...gaps.derived_implementation_impact.map((item) => item.id),
+  ];
+  assert.equal(reported.length, 2, "only Approved-Target-changing decisions block");
+  for (const id of nonBlocking) {
+    assert.ok(!reported.includes(id), `${id} must not be reported as a Human decision`);
+  }
+});
+
+test("impact surfaces belonging to another requirement are dropped", async () => {
+  const client = scriptedClient([
+    { route: "impact_scope", primary_source: "project_context.json", reason: "impact" },
+    {
+      sufficiency: "sufficient",
+      answer: "影響範囲です。",
+      impact_items: [
+        { surface_id: "surface.controller.visit_date_rule", reason: "controller" },
+        { surface_id: "surface.api.search_endpoint", reason: "owner-city-search only" },
+      ],
+      evidence: ["project_context.json#surface.controller.visit_date_rule"],
+      additional_source: null,
+      additional_reason: null,
+    },
+  ]);
+  const result = await runRetrieval("この要件はどこに影響しますか？", client, SAME_DAY);
+  assert.deepEqual(result.impactItems.map((item) => item.surface_id), ["surface.controller.visit_date_rule"]);
+  assert.match(result.validationWarnings.join(" "), /surface\.api\.search_endpoint/);
+});
+
+test("the same question under a different requirement is not served from the other's cache", async () => {
+  const caches = makeCacheStorage();
+  const store = makeStore();
+  const client = scriptedClient([...CURRENT_BEHAVIOR_TURN, ...SAME_DAY_BEHAVIOR_TURN]);
+  const question = "現在はどう動いていますか？";
+
+  const first = await responseJson(await handleAskRequest(
+    makeRequest(question, "owner-city-search"), ENV, { store, client, caches },
+  ));
+  const second = await responseJson(await handleAskRequest(
+    makeRequest(question, SAME_DAY), ENV, { store, client, caches },
+  ));
+
+  assert.equal(client.calls, 4, "the second requirement must reach the model, not the cache");
+  assert.equal(caches.entries.size, 2);
+  assert.notEqual(second.body.answer, first.body.answer);
+  assert.deepEqual(store.calls.audit.map((audit) => audit.cacheStatus), ["miss", "miss"]);
+});
+
+test("the public UI registry matches the server requirement registry", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const markup = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const serverIds = Object.keys(REQUIREMENTS).sort();
+
+  // The UI must offer exactly what the API accepts: an extra tab would produce a
+  // rejected request, a missing one would hide a shipped requirement.
+  const uiIds = [...new Set([...markup.matchAll(/data-requirement="([^"]+)"/g)].map((match) => match[1]))].sort();
+  assert.deepEqual(uiIds, serverIds);
+
+  for (const [id, requirement] of Object.entries(REQUIREMENTS)) {
+    assert.ok(script.includes(`"${id}"`), `script.js must offer ${id}`);
+    assert.ok(script.includes(requirement.base_path), `script.js must point ${id} at ${requirement.base_path}`);
+  }
 });
