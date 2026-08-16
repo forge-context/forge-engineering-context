@@ -4,24 +4,27 @@ const stepContent = [
     kicker: "要件",
     title: "注文詳細画面から、注文をキャンセルできるようにしたい。",
     description: "この要件が触れる実装面をたどり、根拠と未確定の判断を段階ごとに整理します。",
-    label: "入力",
-    detail: "requirement.order_cancellation",
+    label: "入力された要件",
+    detailKind: "text",
+    detail: "注文詳細画面から、注文をキャンセルできるようにしたい。",
   },
   {
     status: "対象範囲を限定",
     kicker: "関連する実装面",
-    title: "Order Detail から Service まで、要件が触れる範囲を限定する。",
+    title: "要件に関連する実装面を限定する。",
     description: "プロジェクト全体を要約せず、UI、API、Controller、Service と周辺機能のうち、この変更に必要な Context だけを対象にします。",
-    label: "対象範囲",
-    detail: "ui.order_detail → api.cancel → controller → service",
+    label: "概念上の実装面",
+    detailKind: "path",
+    detail: ["Order Detail", "Cancel API", "Controller", "Service"],
   },
   {
     status: "観測済み",
-    kicker: "リポジトリの根拠",
+    kicker: "Project Context からの観測",
     title: "返金機能、在庫予約、Audit Log の既存実装を、根拠とともに確認する。",
     description: "存在が確認できる機能は事実として記録します。ただし「存在する」ことを「今回使うべき」という仕様判断には変換しません。",
     label: "観測済み",
-    detail: "payment.refund | inventory.reservation | audit.status_change",
+    detailKind: "tags",
+    detail: ["返金 capability", "在庫予約", "Audit Log"],
   },
   {
     status: "未決定",
@@ -29,7 +32,8 @@ const stepContent = [
     title: "返金方針、権限、在庫解放のタイミングは、コードだけでは決められない。",
     description: "追加調査で判明する事実と、責任者が決めるべき事項を区別します。根拠が途切れた場所を、妥当そうな仮定で埋めません。",
     label: "Context Gap",
-    detail: "refund_policy | cancel_permission | inventory_release_timing",
+    detailKind: "tags",
+    detail: ["返金ポリシー", "キャンセル権限", "在庫解放タイミング"],
   },
   {
     status: "合意済み",
@@ -37,7 +41,8 @@ const stepContent = [
     title: "プロジェクト上の権限を持つ人が、未確定事項を具体的に決定する。",
     description: "回答は会話のまま流さず、どの Gap に対する誰の判断かが分かる形で、実装 Context に組み込みます。",
     label: "Human Alignment",
-    detail: "human_decisions[] → resolved gaps",
+    detailKind: "text",
+    detail: "未決定事項と、人が決めた仕様を対応づける。",
   },
   {
     status: "引き継ぎ可能",
@@ -45,7 +50,8 @@ const stepContent = [
     title: "根拠と決定済み事項を、実装可能な小さな Context として引き継ぐ。",
     description: "Coding Agent は、ビジネス判断を再推論する代わりに、対象範囲と決定が明確になった実装へ集中できます。Forge はその前段を担当します。",
     label: "Implementation Package",
-    detail: "implementation_package → Coding Agent",
+    detailKind: "tags",
+    detail: ["根拠", "決定済み仕様", "変更対象", "テスト意図"],
   },
 ];
 
@@ -75,7 +81,38 @@ if (stepper) {
     kicker.textContent = content.kicker;
     title.textContent = content.title;
     description.textContent = content.description;
-    detail.innerHTML = `<span>${content.label}</span><code>${content.detail}</code>`;
+    const detailLabel = document.createElement("span");
+    detailLabel.textContent = content.label;
+    detail.replaceChildren(detailLabel);
+
+    if (content.detailKind === "path") {
+      const path = document.createElement("div");
+      path.className = "conceptual-path";
+      content.detail.forEach((item, itemIndex) => {
+        const node = document.createElement("b");
+        node.textContent = item;
+        path.append(node);
+        if (itemIndex < content.detail.length - 1) {
+          const arrow = document.createElement("i");
+          arrow.textContent = "→";
+          path.append(arrow);
+        }
+      });
+      detail.append(path);
+    } else if (content.detailKind === "tags") {
+      const tags = document.createElement("div");
+      tags.className = "conceptual-tags";
+      content.detail.forEach((item) => {
+        const tag = document.createElement("b");
+        tag.textContent = item;
+        tags.append(tag);
+      });
+      detail.append(tags);
+    } else {
+      const text = document.createElement("p");
+      text.textContent = content.detail;
+      detail.append(text);
+    }
   };
 
   buttons.forEach((button, position) => {
