@@ -1,6 +1,6 @@
 # Ask Forge — Evaluation
 
-このドキュメントは、公開 Demo の Ask Forge に対して実施した検証内容と、そこで確認できた事実だけをまとめたものです。一般的な Benchmark ではなく、要件を絞った targeted evaluation です。記載する数値は、すべて実際に観測した結果です。A〜F 節は `owner-city-search` を対象とした evaluation で、G 節は 2 件目の要件 `same-day-visit` に対する小規模な live qualification です。
+このドキュメントは、公開 Demo の Ask Forge に対して実施した検証内容と、そこで確認できた事実だけをまとめたものです。一般的な Benchmark ではなく、要件を絞った targeted evaluation です。記載する数値は、すべて実際に観測した結果です。A〜F 節は `owner-city-search` を対象とした evaluation、G 節は 2 件目の要件 `same-day-visit` に対する小規模な live qualification、H 節は別プロジェクトを参照する 3 件目の要件 `outline-restore-nested-documents` に対する cross-project qualification です。
 
 ## A. 何を評価しているか
 
@@ -114,11 +114,49 @@ grounded synthesis の出力が token 上限（600）に達して打ち切られ
 
 したがってこの qualification が示すのは、`same-day-visit` でも根拠と権限の境界が保たれること、および upstream failure が誤った回答ではなく fail-safe として現れることです。
 
-## H. Current Limitations
+## H. Cross-project interactive qualification（`outline-restore-nested-documents`）
+
+3 件目の validated requirement は、これまでの 2 件とは**別のプロジェクト**（[Outline](https://github.com/outline/outline)、TypeScript / Koa / Sequelize / React、リビジョン `fb4ad4d`）を参照します。ここで確認したかったのは Project Context の抽出でも schema の一般化でもありません。**すでに用意された、別プロジェクトの Context Artifact を、同じ Ask Forge の interactive consumption path（質問 → routing → 決定論的 source 選択 → grounded synthesis → Evidence / Human Authority controller → 回答）が、プロジェクト固有の retrieval logic を足さずに消費できるか**です。
+
+実行対象は production の公開 endpoint ではなく、**ローカルの request handler と実 model** です（in-memory audit store、response cache 無効、remote D1 は未使用）。各 case の実測値は [evaluation/outline-restore-nested-documents-qualification.json](evaluation/outline-restore-nested-documents-qualification.json) に記録しています。再現コマンドは同ファイルの `note` にあります。
+
+- **Architecture contract: 9/9 PASS、correctness failure 0 件**（current_behavior / impact_scope / human decision 2 種 / 言い換え / why / implementation_handoff / negative control 2 種）。初回 run で 1 件の routing miss がありましたが、project-neutral な修正の後に解消しています（後述）。
+- **Outline 固有の retrieval logic は 0 行** — 追加したのは requirement registry の 1 entry と 4 つの Artifact だけです。Outline 専用の route も、`requirementId` による分岐も、`GAP_FOCUS` の追加も、framework 固有の source mapping もありません。
+- **Human Decision は blocking 2 件のみ** — `gap.restore_scope`（どの削除済み子孫まで復元するか）と `gap.cascade_restore_authorization`（親の復元権限で子孫まで復元してよいか）です。再帰の実装方法、問い合わせの書き方、transaction とイベントの粒度、画面文言、テスト構成（derived implementation impact）と、恒久削除された子孫（non-blocking verification）は blocking として提示されませんでした。
+- **Cross-project contamination なし** — Outline の回答に PetClinic の gap・surface・語彙は現れず、PetClinic の回答に Outline のものも現れませんでした。これは qualification の観察だけでなく、`tests/cross_project.test.js` で machine test しています。
+- **現在の振る舞いと showcase target を混同していない** — current_behavior の回答は「復元は対象文書だけで、子孫は削除されたまま」と述べており、Outline が子文書を一緒に復元するとは述べていません。implementation_handoff の回答は、承認済みの target が公開 Demo のための人の判断であることに触れています。
+- **Retrieval boundary は不変** — 最大 2 sources、追加取得は focused why の 1 case のみで、`gaps.json` が明示する `evidence_ref` を決定論的に辿った結果です。
+
+### 2 件目のプロジェクトが露出させた routing の意味境界
+
+初回 run では「権限の異なる子文書がある場合はどう扱いますか？」が `human_decision` ではなく `forge_design` に分類されました（再実行しても同じ）。回答自体は `architecture.md` に grounded で Outline の振る舞いを捏造していませんでしたが、対象アプリケーションの未決定事項を尋ねた質問が、Forge 自身の設計に関する質問として扱われていました。同じ論点を要件側の語彙で言い換えた質問は `human_decision` に到達していたため、Artifact の欠落ではなく **router の意味境界の曖昧さ**です。
+
+原因は route の定義そのものにありました。`forge_design` は「Forge principles or architecture」とだけ書かれており、"principles" が対象アプリケーションの方針を尋ねる質問まで引き寄せます。`human_decision` は「未解決の判断」という meta な書き方で、「この場合どう扱うべきか」という形の質問を含むことが示されていませんでした。
+
+修正は **route の意味境界を質問の主題で切り直す**ことだけです。router はまず主題（対象アプリケーションとその要件か、Forge 自身か）を決め、`human_decision` は現在の要件についての未解決の behavior / policy / scope / options / authority を、`forge_design` は Forge 自身を扱うと明示しました。あわせて「対象アプリケーションについての質問は、どう言い換えられていても `forge_design` ではない」ことを明示しています。**プロジェクト固有の分岐、requirement ID の分岐、keyword regex、日本語の定型句照合は一切追加していません**（`tests/routing.test.js` が router contract にこれらの語彙が入らないことを machine test しています）。
+
+修正後、同じ質問は `human_decision` / `gaps.json` に到達し、`gap.cascade_restore_authorization` を含む blocking 2 件を返しました。Forge 自身への質問（「Forge は Human Decision と implementation detail をどう区別しますか？」「Forge の retrieval architecture は？」「Forge の limitation は？」）は引き続き `forge_design` / `architecture.md` です。PetClinic 2 件も再実行し、`GAP_FOCUS` による focus、追加取得、scope gate のいずれも変化していません。この変更で `PROMPT_VERSION` を v0.5 → v0.6 に更新しています。
+
+### 2 件目のプロジェクトが露出させた prompt の曖昧さ
+
+同じ path を別プロジェクトで動かしたことで、プロジェクト固有ではない曖昧さが二つ表面化し、いずれも synthesis prompt の側で解消しました（`PROMPT_VERSION` v0.5。上記の routing 修正とあわせ、最終的に v0.4 → v0.6 になります。cache key の入力なので、既存 cache entry は参照されなくなります）。
+
+| 露出した事象 | 原因 | 対応 |
+| --- | --- | --- |
+| current_behavior が `contract_validation` で失敗 | model が Artifact 内部に記録された source path（`server/models/Document.ts#...`）を citation として返した | citation は「取得した Artifact 名 + その内部の locator」であり、Artifact 内部の source path は citation ではないことを明示 |
+| negative control が `contract_validation` で失敗 | model が `insufficient` を空の answer / 空の evidence で返した。contract は partial 以外で evidence を必須にしている | `insufficient` でも欠けている context を述べ、確認した source を citation することを明示 |
+
+あわせて、prompt に残っていた参照プロジェクト固有の表現（「一般的な Spring PetClinic 知識を使わない」）を、参照プロジェクト・framework・library・domain に関する一般知識全般を使わない、という project-neutral な表現へ変更しました。変更後に PetClinic 2 件の要件を実 model path で再実行し、routing・gap の focus・追加取得・scope gate のいずれも変化がないことを確認しています。
+
+**この節が示す範囲**：Ask Forge の interactive consumption path が、2 プロジェクト / 3 件の validated requirement で成立することを確認した、というところまでです。任意のリポジトリを扱えること、Project Context schema がプロジェクト横断で一般化できること、Outline の製品としての振る舞いを Forge が理解していることは、いずれもこの節の主張ではありません。
+
+## I. Current Limitations
 
 この evaluation の適用範囲は限定的です。
 
-- **要件ごとに検証の深さが異なる** — A〜F 節の evaluation は `owner-city-search` に対するもので、7 case を 3 回連続実行した結果です。`same-day-visit` については G 節の 7 case を 1 回実行した qualification だけであり、同じ深さでは測定していません。
+- **要件ごとに検証の深さが異なる** — A〜F 節の evaluation は `owner-city-search` に対するもので、7 case を 3 回連続実行した結果です。`same-day-visit` については G 節の 7 case を 1 回実行した qualification だけ、`outline-restore-nested-documents` については H 節の 9 case を 1 回実行した qualification だけであり、同じ深さでは測定していません。
+- **H 節は production endpoint での測定ではない** — ローカルの request handler と実 model による実行です。edge、rate limit、D1、cache の実挙動はこの節に含まれません。
+- **開いている Human Decision が複数あるとき、why 質問は個別の理由を返さない** — 質問を 1 件の gap に絞り込む presentation heuristic（`GAP_FOCUS`）は要件ごとの table で、Outline には entry がありません。そのため「なぜ勝手に決めてはいけないのか」に対する回答は、各 gap の `why_not_resolved_automatically` ではなく未解決 2 件の列挙になります。追加取得と source boundary は正しく働いており、根拠のない回答も出していません。要件固有の regex を足せば解消しますが、それは今回検証したい「プロジェクト固有の logic を足さずに扱えるか」に反するため、追加していません。
 - **Artifact は curated** — 人手で整理した固定 Artifact を対象としており、自動生成された Context ではありません。
 - **Vector DB / Embedding は未使用** — 現在の retrieval は route から primary source への決定論的 mapping です。
 - **公開 Demo に general repository ingestion は含まれない** — 任意のリポジトリを調査するパイプラインは対象外です。

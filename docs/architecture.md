@@ -4,7 +4,7 @@
 
 ## Ask Forge Public Demo v0.1
 
-公開 Demo は検証済みの要件に限定し、次の流れを実行します。現在は `owner-city-search`（飼い主検索に市区町村の条件を追加する）と `same-day-visit`（当日の診療予約を登録できるようにする）の 2 件を公開しています。要件はリクエストごとに一つだけ選択し、取得できる Artifact はその要件のものと、要件に依存しない `architecture.md` に限定されます。ある要件の回答が、別の要件の Artifact を参照することはありません。
+公開 Demo は検証済みの要件に限定し、次の流れを実行します。現在は `owner-city-search`（飼い主検索に市区町村の条件を追加する）、`same-day-visit`（当日の診療予約を登録できるようにする）、`outline-restore-nested-documents`（ゴミ箱から復元した文書の子文書も一緒に復元する）の 3 件を公開しています。前者 2 件は Spring PetClinic、3 件目は Outline を参照しており、参照プロジェクトは 2 件です。要件はリクエストごとに一つだけ選択し、取得できる Artifact はその要件のものと、要件に依存しない `architecture.md` に限定されます。ある要件の回答が、別の要件の Artifact を参照することはありません。参照プロジェクトが増えても retrieval は要件 ID で Artifact 集合を選ぶだけで、プロジェクト固有の分岐は持ちません。
 
 ```
 要件に限定した質問

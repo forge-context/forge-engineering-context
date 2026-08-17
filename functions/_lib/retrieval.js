@@ -9,7 +9,7 @@ import { MalformedModelResponseError } from "./bailian.js";
 // Bump whenever ROUTER_SYSTEM, SYNTHESIS_SYSTEM, the grounded token budget, or the
 // deterministic controller changes: it is a cache-key input, so a stale value would
 // serve answers produced under a different configuration.
-export const PROMPT_VERSION = "retrieval-routing-v0.4/controller-v0.2";
+export const PROMPT_VERSION = "retrieval-routing-v0.6/controller-v0.2";
 
 // Grounded synthesis output budget. Raised from 600 after an observed truncation:
 // impact_scope on a requirement with six surfaces stopped with finish_reason
@@ -76,22 +76,27 @@ function addUsage(total, call) {
   total.calls += 1;
 }
 
-const ROUTER_SYSTEM = `Classify one Ask Forge question into exactly one route and return only JSON.
+// The subject of the question decides the route: everything except forge_design is
+// about the target application and its requirement. A second reference project made
+// that boundary matter — "how should this case be handled?" about the target
+// application reads as a design question unless the router is told whose design.
+export const ROUTER_SYSTEM = `Classify one Ask Forge question into exactly one route and return only JSON.
+First decide the subject: the target application and its current requirement, or Forge itself.
 Routes and fixed primary sources:
 - current_behavior -> project_context.json: current implementation behavior
 - impact_scope -> project_context.json: evidenced affected files, layers, or surfaces
-- human_decision -> gaps.json: unresolved pre-alignment decisions or why Forge did not decide them
+- human_decision -> gaps.json: unresolved behavior, policy, scope, options, or authority for the current requirement, including whether something has been decided and who must decide it, or why Forge did not decide it
 - implementation_handoff -> implementation_package.json: approved post-alignment Coding Agent handoff
-- forge_design -> architecture.md: Forge principles or architecture
-Choose the closest route. Never name another file.
+- forge_design -> architecture.md: Forge itself, its principles, architecture, retrieval, controller, or limitations
+Choose the closest route. A question whose subject is the target application or its requirement is never forge_design, however it is phrased: asking how a case should be handled, or what the policy is, does not make it a question about Forge. Never name another file.
 JSON: {"route":"one route","primary_source":"mapped filename","reason":"short string"}`;
 
 const SYNTHESIS_SYSTEM = `You are the bounded, grounded Ask Forge answer step. Return only JSON.
-Use only retrieved artifacts supplied by the user. Never use general Spring PetClinic knowledge, invent context or gaps, close Human-authority gaps, or present candidate options as approved. Keep current behavior distinct from the Human-approved target.
+Use only retrieved artifacts supplied by the user. Never use general knowledge about the referenced project, framework, library, or domain, invent context or gaps, close Human-authority gaps, or present candidate options as approved. Keep current behavior distinct from the Human-approved target.
 Only entries under "gaps" await a Human decision. Entries under "non_blocking_verifications" and "derived_implementation_impact" are not Human decisions and must never be reported as blocking.
 
-Sufficiency: sufficient when evidence answers the question; partial only when exactly one allowlisted source can supply specifically missing evidence; insufficient when the evidence cannot support the requested answer. Explicitly state missing context.
-additional_source and additional_reason are non-null only for partial. For impact_scope, provide exact retrieved surface_id values in impact_items. Evidence entries use retrieved_filename#artifact-locator. Never cite an unretrieved source. Keep Japanese concise.
+Sufficiency: sufficient when evidence answers the question; partial only when exactly one allowlisted source can supply specifically missing evidence; insufficient when the evidence cannot support the requested answer. An insufficient answer still states which context is missing and still cites the retrieved source that was checked; evidence is never empty unless the sufficiency is partial.
+additional_source and additional_reason are non-null only for partial. For impact_scope, provide exact retrieved surface_id values in impact_items. Evidence entries use retrieved_filename#artifact-locator, where retrieved_filename is one of the retrieved artifact filenames above and the locator is an id or field inside that artifact. A source path recorded inside an artifact is evidence content, never a citation. Never cite an unretrieved source. Keep Japanese concise.
 JSON: {"sufficiency":"sufficient|partial|insufficient","answer":"string","impact_items":[{"surface_id":"exact id","reason":"string"}],"evidence":["string"],"additional_source":null,"additional_reason":null}`;
 
 function artifactText(artifacts, name) {

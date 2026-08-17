@@ -1,0 +1,155 @@
+{
+  "schema_version": "1.1",
+  "artifact_stage": "pre_alignment",
+  "provenance": "curated_showcase",
+  "requirement_id": "outline-restore-nested-documents",
+  "requirement_ref": "requirement.md",
+  "reference_revision": "fb4ad4d0462e89f5764ed36a560adcd10b42e6f5",
+  "authority_boundary": {
+    "rule": "gaps に記録するのは、承認される振る舞い（Approved Target）自体を変える判断だけです。",
+    "excluded": [
+      "根拠が未確認というだけの事項は、Gap ではなく調査項目として扱います。",
+      "実装方法の選択は、承認された振る舞いから導かれる実装上の影響として扱い、人の判断に昇格させません。",
+      "この要件を実装不能にする具体的根拠がない事項は、blocking な Gap ではなく、委譲可能な検証事項として扱います。"
+    ]
+  },
+  "conflicts": [],
+  "gaps": [
+    {
+      "id": "gap.restore_scope",
+      "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
+      "question": "親文書を復元するとき、どの削除済み子孫まで一緒に復元するか。",
+      "observed_existing_behavior": {
+        "description": "restoreTo は deletedAt の分岐で対象文書だけを復元し、子孫を参照しません。削除側では Collection.deleteDocument が子孫を先に destroy するため、親をゴミ箱へ入れると子孫も削除済みになります。archive 側には子孫をまとめて復元する既存経路がありますが、削除側にはありません。",
+        "evidence_ref": "project_context.json#surface.model.document_restore_to"
+      },
+      "why_not_resolved_automatically": "復元の対象範囲は、利用者から見える振る舞いそのものです。「子文書も一緒に復元する」という要件からは、どの削除済み子孫を対象にするかまでは導けません。特に、親の cascade 削除によって削除された子孫と、それ以前に個別に削除されていた子孫は、固定リビジョンの記録では安全に区別できません。documents には削除の由来を示す列がなく、各文書は自身の deletedAt を持つだけで、cascade 削除でも子孫はそれぞれ自分の deletedAt を持ちます。archive 側の既存経路は archivedAt を辿るだけで、この区別を表現していません。どこまで戻すかは、利用者が復元操作に期待する範囲に関わる製品判断です。",
+      "candidate_options": [
+        {
+          "option": "復元時点で親の階層配下にある削除済み子孫をすべて復元する",
+          "status": "closest to the observed archive-side precedent",
+          "rationale": "archive 側の子孫をまとめて復元する経路に最も近い形です。ただし archive 側は archivedAt を辿るもので、削除済み子孫に対する前例ではありません。個別に削除されていた子孫も一緒に戻ります。"
+        },
+        {
+          "option": "対象文書だけを復元する（現在の振る舞いを維持する）",
+          "status": "current observed behavior",
+          "rationale": "現在の restoreTo の削除側分岐そのものです。要件を満たさないため、この要件では選ばれない前提ですが、比較の基準として記録します。"
+        },
+        {
+          "option": "親の削除時刻に近い子孫だけを cascade 由来とみなして復元する",
+          "status": "not observed in codebase",
+          "rationale": "cascade 由来と個別削除を分けたい場合の案ですが、固定リビジョンにこの区別を表す標識はなく、時刻の近さは削除の由来を示す根拠として記録されていません。"
+        }
+      ],
+      "also_unresolved": [
+        "CleanupDeletedDocumentsTask は各文書の deletedAt だけを見て 30 日を過ぎたものを恒久削除するため、親より前に削除された子孫が既に恒久削除されている場合があります。これは保持期間の事実であって、どの範囲を復元すべきかという製品判断の根拠にはなりません。"
+      ],
+      "status": "open",
+      "resolution": null
+    },
+    {
+      "id": "gap.cascade_restore_authorization",
+      "type": "human_authority_decision",
+      "authority_class": "blocking_human_decision",
+      "blocks_approved_target": true,
+      "question": "親を復元できる利用者は、子孫の復元権限も持つものとして扱うか。権限差がある子孫はどう扱うか。",
+      "observed_existing_behavior": {
+        "description": "documentRestorer は対象文書 1 件に対して restore（archive 済みの場合は unarchive）を、宛先 collection に対して updateDocument を authorize します。子孫ごとの authorize はありません。policy 側では restore も unarchive も 1 件の文書に対する述語で、文書ごとのメンバーシップか collection の権限で評価されるため、同じ階層でも文書ごとに結果が異なりうることが定義から読み取れます。",
+        "evidence_ref": "project_context.json#surface.command.document_restorer"
+      },
+      "why_not_resolved_automatically": "現在は削除済み文書の復元が子孫に及ばないため、「子孫に対する権限をどう扱うか」という状況自体がコード上に存在せず、既存の振る舞いから答えを導けません。文書ごとに権限が異なりうることは policy の定義から明示的に読み取れますが、権限差がある子孫を復元対象に含めるのか、除外するのか、操作全体を失敗させるのかは、利用者が見る結果を変える製品判断です。archive 側の既存経路が子ごとに authorize していないことは観測できますが、それは削除済み文書の復元に対する承認済みの方針ではありません。",
+      "candidate_options": [
+        {
+          "option": "親の復元操作を単位として扱い、子孫ごとの権限確認は行わない",
+          "status": "closest to the observed archive-side precedent",
+          "rationale": "archive 側の子孫をまとめて復元する経路と同じ形です。利用者に子ごとの操作を求めません。権限差がある子孫も親の操作に従って戻ります。"
+        },
+        {
+          "option": "子孫ごとに権限を評価し、権限のない子孫は復元しない",
+          "status": "not observed in codebase",
+          "rationale": "policy が文書単位で定義されていることには沿いますが、復元結果が利用者ごとに部分的になります。部分復元をどう通知するかという別の判断も生じます。"
+        },
+        {
+          "option": "権限のない子孫が一つでもあれば操作全体を失敗させる",
+          "status": "not observed in codebase",
+          "rationale": "結果が分かりやすい一方、階層の一部に権限がないだけで親の復元ができなくなります。"
+        }
+      ],
+      "also_unresolved": [
+        "宛先 collection が active でない場合に復元が失敗することは documentRestorer で観測できますが、これは復元先の検証であって、子孫の権限に関する判断ではありません。"
+      ],
+      "status": "open",
+      "resolution": null
+    }
+  ],
+  "non_blocking_verifications": [
+    {
+      "id": "verification.permanently_deleted_descendants",
+      "authority_class": "non_blocking_verification",
+      "blocks_approved_target": false,
+      "delegatable": true,
+      "topic": "保持期間を過ぎて恒久削除された子孫は復元できない、という運用上の限界の確認。",
+      "observed_existing_behavior": {
+        "description": "CleanupDeletedDocumentsTask は各文書の deletedAt を個別に見て、30 日を過ぎた文書を恒久削除します。親子関係は抽出条件に含まれません。",
+        "evidence_ref": "project_context.json#surface.task.deleted_document_cleanup"
+      },
+      "why_not_blocking": "恒久削除された行は、どの復元範囲を選んでも復元できません。承認される振る舞いの選択肢を変えるものではなく、選択した範囲の実行結果に現れる制約です。この要件を実装不能にする具体的な根拠も確認できていないため、人の判断待ちにはしません。",
+      "delegated_to": "implementation_and_qa_verification",
+      "verification_intent": [
+        "保持期間を過ぎた子孫が存在する階層で、親の復元が失敗せずに完了することを確認する。",
+        "復元されなかった子孫がある場合の利用者への見え方を確認する。"
+      ],
+      "escalation_condition": "復元できなかった子孫を利用者へ明示的に通知することが要求された場合は、この要件とは別の要件として扱い、あらためて人の判断を求めます。",
+      "status": "open_non_blocking"
+    }
+  ],
+  "derived_implementation_impact": [
+    {
+      "id": "impact.deleted_descendant_traversal",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.restore_scope"],
+      "topic": "削除済み子孫をどう走査するか（再帰の実装方法、問い合わせの書き方、soft-delete を含める指定）。",
+      "rationale": "走査方法は、承認された復元範囲を取得するための手段です。範囲が決まれば実装は導かれるため、独立した判断にはしません。",
+      "evidence_ref": "project_context.json#surface.model.document_delete_cascade",
+      "handoff_note": "既定の子孫走査は soft-deleted を除外し、paranoid を無効にした場合だけ削除済みの子孫を返します。削除済み子孫を対象にするなら、この指定を明示する必要があります。"
+    },
+    {
+      "id": "impact.restore_transaction_and_events",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.restore_scope"],
+      "topic": "復元処理の transaction 境界と、文書ごとに発行するイベントの粒度。",
+      "rationale": "既存の復元も削除も API context の transaction の中で実行され、保存時にイベントを伴います。同じ枠組みに載せるだけであり、承認された振る舞いを変えません。",
+      "evidence_ref": "project_context.json#surface.command.document_restorer",
+      "handoff_note": "削除側はモデルのフックを確実に動かすために子孫を 1 件ずつ destroy しています。復元側で同じ方針を取るかは実装判断です。"
+    },
+    {
+      "id": "impact.structure_reattachment",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.restore_scope"],
+      "topic": "復元した子孫を collection の文書構造へどう再接続するか。",
+      "rationale": "再接続は、承認された復元範囲を画面上の階層として表現するための手段です。",
+      "evidence_ref": "project_context.json#surface.model.document_restore_to",
+      "handoff_note": "restoreTo は復元前に親を確認し、親が draft または非 active であれば parentDocumentId を null にして collection 直下へ戻します。子孫をまとめて復元する場合、親から順に復元しないとこの判定が意図せず働きます。"
+    },
+    {
+      "id": "impact.frontend_restore_affordance",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.restore_scope"],
+      "topic": "復元アクションの画面表現（文言、確認の要否、コンポーネント構成）。",
+      "rationale": "画面表現は、承認された復元範囲を利用者向けに言い換えたものです。",
+      "evidence_ref": "project_context.json#surface.frontend.trash_restore",
+      "handoff_note": "削除ダイアログには入れ子の文書の件数を示す既存の文言があります。復元側に対応する説明を置くかは、承認された範囲に合わせた表現の選択です。"
+    },
+    {
+      "id": "impact.test_extension",
+      "not_a_human_decision": true,
+      "derived_from": ["gap.restore_scope", "gap.cascade_restore_authorization"],
+      "topic": "既存テストの拡張方法（テストの置き場所、構成、追加するケースの分割）。",
+      "rationale": "検証すべき意図は承認された振る舞いから決まります。どのファイルにどう書くかは実装上の整理です。",
+      "evidence_ref": "project_context.json#surface.test.restore_behavior",
+      "handoff_note": "削除済み文書の復元が子孫に及ぶことを表明するテストは現在ありません。既定の子孫走査が soft-deleted を除外することを固定しているテストは既に存在するため、そこと矛盾しない形で追加する必要があります。"
+    }
+  ]
+}

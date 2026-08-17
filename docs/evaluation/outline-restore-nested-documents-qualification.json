@@ -1,0 +1,372 @@
+{
+  "schema_version": "0.1",
+  "date": "2026-08-17",
+  "requirement_id": "outline-restore-nested-documents",
+  "target": "local request handler (functions/_lib/service.js) against the real model",
+  "note": "Cross-project interactive qualification. Not a benchmark. The target is the local Ask Forge request handler with the real model, run with an in-memory audit store and the response cache disabled, so every case exercises the model path; the deployed API and the remote D1 database are untouched. Every number below is an observed value from that run (PROMPT_VERSION retrieval-routing-v0.6/controller-v0.2). Reproduce with: node scripts/qualify_ask_forge.mjs docs/evaluation/outline-restore-nested-documents-qualification.json. The question texts are fixed public test questions; no user-entered question is recorded here.",
+  "cases": [
+    {
+      "id": "A",
+      "category": "current_behavior",
+      "question": "親文書をゴミ箱から復元すると、子文書は現在どうなりますか？",
+      "expected_route": "current_behavior",
+      "actual_route": "current_behavior",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "project_context.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3579,
+      "latency_ms": 9739,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [],
+      "impact_items": [
+        "surface.model.document_restore_to",
+        "surface.command.document_restorer",
+        "surface.frontend.trash_restore"
+      ],
+      "evidence": [
+        "project_context.json#observed_current_behavior.summary",
+        "project_context.json#relevant_implementation_surfaces[2].evidence.note",
+        "project_context.json#relevant_implementation_surfaces[1].evidence.note",
+        "project_context.json#relevant_implementation_surfaces[7].evidence.note"
+      ],
+      "answer": "親文書をゴミ箱から復元しても、子文書は復元されず、削除されたままの状態となります。現在の仕様では、削除（soft delete）は子孫文書へcascadeして実行されますが、復元処理は対象の親文書そのもののみを復元し、cascadeで削除された子孫文書には影響を与えません。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "現状（削除は子孫へ cascade するが、復元は対象文書だけ）を、承認後の target と混同せずに説明。Outline が子文書を一緒に復元するとは述べていない。"
+    },
+    {
+      "id": "B",
+      "category": "impact_scope",
+      "question": "この要件はどこに影響しますか？",
+      "expected_route": "impact_scope",
+      "actual_route": "impact_scope",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "project_context.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3982,
+      "latency_ms": 16188,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [],
+      "impact_items": [
+        "surface.model.document_restore_to",
+        "surface.command.document_restorer",
+        "surface.policy.document_restore",
+        "surface.frontend.trash_restore",
+        "surface.test.restore_behavior"
+      ],
+      "evidence": [
+        "project_context.json#surface.model.document_restore_to",
+        "project_context.json#surface.command.document_restorer",
+        "project_context.json#surface.policy.document_restore",
+        "project_context.json#surface.frontend.trash_restore",
+        "project_context.json#surface.test.restore_behavior"
+      ],
+      "answer": "- surface.model.document_restore_to: 復元の中心です。ここに現在の非対称があります。deletedAt がある場合は対象文書だけを復元して保存します。archivedAt がある場合は子孫を含めて復元する専用の経路へ進みます。この要件で振る舞いを変える中心的な箇所です。\n- surface.command.document_restorer: 復元のドメイン手続きです。宛先 collection が active であることを検証し、削除済みの場合と archive 済みの場合で異なる権限を確認したうえで、モデル側の復元処理を呼びます。権限の確認は対象文書 1 件に対して行われ、子孫ごとの確認はありません。\n- surface.policy.document_restore: 復元・unarchive・削除の権限定義です。いずれも 1 件の文書に対する述語として定義され、文書ごとのメンバーシップ、または所属 collection に対する権限で評価されます。子孫をまとめて扱う権限の概念はここにありません。\n- surface.frontend.trash_restore: 利用者から見た削除と復元です。削除ダイアログは、子孫がある場合に「入れ子の文書も一緒に削除される」ことを件数付きで明示します。復元アクションは対象文書に対して復元 API を呼ぶだけで、子孫に関する説明も選択肢も提示しません。\n- surface.test.restore_behavior: 現在の復元・削除の振る舞いを固定している既存テストです。archive 済み文書の復元や、親が archive 済みの場合の復元は明示的に検証されていますが、削除済み文書の復元が子孫に及ぶことを検証するテストはありません。削除済み子孫の可視性を固定するテストは別にあります。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "返した surface はすべて Outline の project_context.json に実在するもののみ。PetClinic の surface は含まれない。"
+    },
+    {
+      "id": "C",
+      "category": "human_decision_restore_scope",
+      "question": "子文書をどこまで復元するかは決まっていますか？",
+      "expected_route": "human_decision",
+      "actual_route": "human_decision",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "gaps.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3388,
+      "latency_ms": 7674,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [
+        "gap.restore_scope",
+        "gap.cascade_restore_authorization"
+      ],
+      "impact_items": [],
+      "evidence": [
+        "gaps.json#gap.restore_scope",
+        "gaps.json#gap.cascade_restore_authorization"
+      ],
+      "answer": "実装前に Human authority で決める必要がある未解決事項は次の 2 件です。\n- 親文書を復元するとき、どの削除済み子孫まで一緒に復元するか。\n- 親を復元できる利用者は、子孫の復元権限も持つものとして扱うか。権限差がある子孫はどう扱うか。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "blocking Human decision は gap.restore_scope と gap.cascade_restore_authorization の 2 件のみ。derived_implementation_impact（再帰の実装方法、transaction、画面文言、テスト構成）と non_blocking_verification（恒久削除された子孫）は blocking として提示されていない。"
+    },
+    {
+      "id": "D",
+      "category": "human_decision_authorization",
+      "question": "権限の異なる子文書がある場合はどう扱いますか？",
+      "expected_route": "human_decision",
+      "actual_route": "human_decision",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "gaps.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3312,
+      "latency_ms": 7336,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [
+        "gap.restore_scope",
+        "gap.cascade_restore_authorization"
+      ],
+      "impact_items": [],
+      "evidence": [
+        "gaps.json#gap.restore_scope",
+        "gaps.json#gap.cascade_restore_authorization"
+      ],
+      "answer": "実装前に Human authority で決める必要がある未解決事項は次の 2 件です。\n- 親文書を復元するとき、どの削除済み子孫まで一緒に復元するか。\n- 親を復元できる利用者は、子孫の復元権限も持つものとして扱うか。権限差がある子孫はどう扱うか。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "以前の router prompt では forge_design へ誤分類されていた（「どう扱いますか」を Forge 自身の設計に関する問いと解釈）。route の意味境界を「質問の主題が対象アプリケーション／要件か、Forge 自身か」で分ける project-neutral な contract に変更したのち、human_decision に到達。blocking 2 件を返し、gap.cascade_restore_authorization を含む。"
+    },
+    {
+      "id": "D2",
+      "category": "human_decision_authorization_paraphrase",
+      "question": "子文書ごとに復元の権限が違う場合の扱いは、まだ決まっていないのですか？",
+      "expected_route": "human_decision",
+      "actual_route": "human_decision",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "gaps.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3264,
+      "latency_ms": 5913,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [
+        "gap.restore_scope",
+        "gap.cascade_restore_authorization"
+      ],
+      "impact_items": [],
+      "evidence": [
+        "gaps.json#gap.restore_scope",
+        "gaps.json#gap.cascade_restore_authorization"
+      ],
+      "answer": "実装前に Human authority で決める必要がある未解決事項は次の 2 件です。\n- 親文書を復元するとき、どの削除済み子孫まで一緒に復元するか。\n- 親を復元できる利用者は、子孫の復元権限も持つものとして扱うか。権限差がある子孫はどう扱うか。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "同じ論点を要件側の語彙で言い換えた場合は human_decision に到達。route miss が要件の欠落ではなく質問文の言い回しに依存することを示す。"
+    },
+    {
+      "id": "E",
+      "category": "human_decision_why",
+      "question": "なぜこれは実装担当が勝手に決めてはいけないのですか？",
+      "expected_route": "human_decision",
+      "actual_route": "human_decision",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "gaps.json",
+        "project_context.json"
+      ],
+      "guardrails_triggered": [
+        "deterministic_controller"
+      ],
+      "validation_warnings": [
+        "followed explicit evidence_ref to project_context.json"
+      ],
+      "additional_retrieval": true,
+      "additional_source": "project_context.json",
+      "model_called": true,
+      "total_tokens": 9495,
+      "latency_ms": 22621,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [
+        "gap.restore_scope",
+        "gap.cascade_restore_authorization"
+      ],
+      "impact_items": [],
+      "evidence": [
+        "gaps.json#gap.restore_scope",
+        "gaps.json#gap.cascade_restore_authorization"
+      ],
+      "answer": "実装前に Human authority で決める必要がある未解決事項は次の 2 件です。\n- 親文書を復元するとき、どの削除済み子孫まで一緒に復元するか。\n- 親を復元できる利用者は、子孫の復元権限も持つものとして扱うか。権限差がある子孫はどう扱うか。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "gaps.json の explicit evidence_ref を決定論的に辿り、project_context.json を追加取得して 2 source で停止。max source boundary は維持。ただし open gap が 2 件あり GAP_FOCUS の narrowing が効かないため、回答は why_not_resolved_automatically ではなく未解決 2 件の列挙になっている（Known Limitations 参照）。"
+    },
+    {
+      "id": "F",
+      "category": "implementation_handoff",
+      "question": "実装担当には何を渡せますか？",
+      "expected_route": "implementation_handoff",
+      "actual_route": "implementation_handoff",
+      "sufficiency": "sufficient",
+      "retrieved_sources": [
+        "implementation_package.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 2948,
+      "latency_ms": 13555,
+      "result_status": "success",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [],
+      "impact_items": [
+        "surface.model.document_restore_to",
+        "surface.model.document_delete_cascade",
+        "surface.command.document_restorer",
+        "surface.policy.document_restore",
+        "surface.route.document_restore",
+        "surface.task.deleted_document_cleanup",
+        "surface.frontend.trash_restore",
+        "surface.test.restore_behavior"
+      ],
+      "evidence": [
+        "implementation_package.json#approved_target",
+        "implementation_package.json#human_decisions",
+        "implementation_package.json#implementation_surfaces",
+        "implementation_package.json#handoff_note"
+      ],
+      "answer": "実装担当（Coding Agent）には、implementation_package.json が渡せます。このパッケージには、公開Demo用に承認された目標振る舞い（削除済み親文書の復元時に階層配下の削除済み子孫も一緒に復元する、権限確認は親の復元操作を単位とする）と、そこから導かれる実装面上の変更点（モデル、コマンド、フロントエンド、テスト等のsurface_refごとの変更指示）が含まれています。再帰の実装方法やトランザクション粒度などの詳細な実装判断は委ねられますが、承認済みの振る舞いの範囲内で実装を進めるための十分な情報が記載されています。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "post-alignment の approved_target と human_decisions を、pre-alignment の未解決 gap として提示していない。回答は「公開Demo用に承認された」ものであることに触れており、Outline の現在の振る舞いとしては述べていない。"
+    },
+    {
+      "id": "G",
+      "category": "negative_out_of_scope",
+      "question": "この要件で、文書のリアルタイム共同編集の同期方式はどう変わりますか？",
+      "expected_route": "insufficient",
+      "actual_route": "current_behavior",
+      "sufficiency": "insufficient",
+      "retrieved_sources": [
+        "project_context.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3354,
+      "latency_ms": 5423,
+      "result_status": "insufficient",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [],
+      "impact_items": [],
+      "evidence": [
+        "project_context.json#observed_current_behavior.summary",
+        "project_context.json#relevant_implementation_surfaces"
+      ],
+      "answer": "提供された文書（project_context.json）には、文書の削除・復元（soft delete/restore）およびアーカイブに関するサーバーサイドのロジックとフロントエンドの動作は記載されていますが、「リアルタイム共同編集の同期方式」に関する記述は一切含まれていません。したがって、この要件が同期方式にどう影響するかを回答するための証拠が存在しません。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "artifact に根拠がないことを明示して insufficient。route は forge_design だが、根拠のない主張は生成していない。既存の認証 scope gate とは重ならない質問を選んでいるため、model path を実際に通過している。"
+    },
+    {
+      "id": "G2",
+      "category": "negative_out_of_scope_within_project",
+      "question": "復元した文書の全文検索インデックスは、いつ作り直されますか？",
+      "expected_route": "insufficient",
+      "actual_route": "current_behavior",
+      "sufficiency": "insufficient",
+      "retrieved_sources": [
+        "project_context.json"
+      ],
+      "guardrails_triggered": [],
+      "validation_warnings": [],
+      "additional_retrieval": false,
+      "additional_source": null,
+      "model_called": true,
+      "total_tokens": 3311,
+      "latency_ms": 4381,
+      "result_status": "insufficient",
+      "upstream_error_kind": null,
+      "upstream_failure_stage": null,
+      "upstream_finish_reason": null,
+      "human_authority": [],
+      "impact_items": [],
+      "evidence": [
+        "project_context.json#observed_current_behavior",
+        "project_context.json#relevant_implementation_surfaces"
+      ],
+      "answer": "提供されたアーティファクトには、全文検索インデックスの再構築タイミングに関する記述が含まれていません。",
+      "http_status": 200,
+      "pass": true,
+      "observation": "参照プロジェクト側の話題だが artifact に根拠がない質問。project_context.json を取得したうえで、記述がないことを明示して insufficient。"
+    }
+  ],
+  "summary": {
+    "cases_run": 9,
+    "architecture_contract_pass": 9,
+    "architecture_contract_fail": 0,
+    "blocking_human_decisions_reported": 2,
+    "cross_requirement_contamination": false,
+    "cross_project_contamination": false,
+    "unsupported_surface": false,
+    "unsupported_inference": false,
+    "max_retrieved_sources": 2,
+    "additional_retrieval_cases": [
+      "E"
+    ],
+    "model_called_cases": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "D2",
+      "E",
+      "F",
+      "G",
+      "G2"
+    ],
+    "total_tokens": 36633,
+    "latency_ms": {
+      "min": 4381,
+      "max": 22621
+    },
+    "route_misses": [],
+    "note": "初回 run では D が forge_design へ誤分類された。router prompt の意味境界を project-neutral に修正（PROMPT_VERSION v0.5 → v0.6）した後の再実行で全 case PASS。requirement 固有の分岐や keyword rule は追加していない。"
+  }
+}

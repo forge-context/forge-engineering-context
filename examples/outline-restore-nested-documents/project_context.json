@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.1",
+  "artifact_stage": "investigation",
+  "provenance": "curated_showcase",
+  "requirement_id": "outline-restore-nested-documents",
+  "requirement_ref": "requirement.md",
+  "reference_project": "outline（公開参照用・要件に限定した抜粋）",
+  "reference_repository": "https://github.com/outline/outline",
+  "reference_revision": "fb4ad4d0462e89f5764ed36a560adcd10b42e6f5",
+  "note": "この要件が触れる範囲だけを抜き出しており、アプリケーション全体を表すものではありません。以下の根拠はすべて reference_revision に固定しています。参照元のソースコードは複製せず、パス・識別子・観測事実だけで示しています。",
+  "observed_current_behavior": {
+    "summary": "文書をゴミ箱へ入れる soft delete は、子孫文書へ cascade します。削除は最も深い子孫から順に実行され、親自身は最後に削除されます。一方、削除済み文書の復元は対象文書そのものだけを復元し、cascade で削除された子孫は削除されたままです。archive 側は非対称で、archive も unarchive も子孫をまとめて扱う既存経路を持ちます。削除済み子孫を走査する既定の問い合わせは soft-deleted を除外するため、削除済み子孫は明示的に指定しない限り見えません。",
+    "evidence_refs": [
+      "surface.model.document_restore_to",
+      "surface.model.document_delete_cascade",
+      "surface.command.document_restorer",
+      "surface.frontend.trash_restore"
+    ]
+  },
+  "relevant_implementation_surfaces": [
+    {
+      "id": "surface.route.document_restore",
+      "layer": "API Route",
+      "description": "復元と削除の HTTP 入口です。復元は削除済みの文書も読み込めるよう paranoid を無効にして対象文書を 1 件だけ取得し、復元処理へ委譲します。取得するのは対象文書のみで、この段階で子孫を集める処理はありません。",
+      "evidence": {
+        "type": "route_handler",
+        "path": "server/routes/api/documents/documents.ts",
+        "symbol": "documents.restore",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/routes/api/documents/documents.ts",
+        "note": "documents.restore は id と任意の collectionId / revisionId を受け取り、対象文書を paranoid: false で 1 件取得して documentRestorer を呼びます。同じファイルの documents.delete は permanent 指定でない場合に destroyWithCtx を呼びます。route 自体は auth と rate limiter と入力検証を担い、復元範囲の判断は持ちません。"
+      }
+    },
+    {
+      "id": "surface.command.document_restorer",
+      "layer": "Command",
+      "description": "復元のドメイン手続きです。宛先 collection が active であることを検証し、削除済みの場合と archive 済みの場合で異なる権限を確認したうえで、モデル側の復元処理を呼びます。権限の確認は対象文書 1 件に対して行われ、子孫ごとの確認はありません。",
+      "evidence": {
+        "type": "command_module",
+        "path": "server/commands/documentRestorer.ts",
+        "symbol": "documentRestorer",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/commands/documentRestorer.ts",
+        "note": "deletedAt がある場合は対象文書に restore、宛先 collection に updateDocument を authorize します。archivedAt の場合は restore の代わりに unarchive を authorize します。いずれの分岐でも authorize の対象は引数で渡された 1 件の文書だけで、子孫を列挙する処理はこのコマンドにありません。宛先 collection が active でない場合は ValidationError になります。"
+      }
+    },
+    {
+      "id": "surface.model.document_restore_to",
+      "layer": "Domain Model",
+      "description": "復元の中心です。ここに現在の非対称があります。deletedAt がある場合は対象文書だけを復元して保存します。archivedAt がある場合は子孫を含めて復元する専用の経路へ進みます。この要件で振る舞いを変える中心的な箇所です。",
+      "evidence": {
+        "type": "model_method",
+        "path": "server/models/Document.ts",
+        "symbol": "restoreTo",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/models/Document.ts",
+        "note": "restoreTo は deletedAt の分岐で自身の restore と保存だけを行い、子孫を参照しません。archivedAt の分岐では同じファイルの private メソッド restoreArchivedWithChildren を呼び、親から子へ再帰的に archivedAt を解除します。対になる archiveWithChildren も子孫を同じ操作でまとめて archive します。つまり「子孫をまとめて復元する」前例は archive 側に既に存在し、削除側には存在しません。restoreTo は復元前に親文書を確認し、親が draft または非 active であれば parentDocumentId を null にして collection 直下へ戻します。"
+      }
+    },
+    {
+      "id": "surface.model.document_delete_cascade",
+      "layer": "Domain Model",
+      "description": "削除が子孫へ cascade する箇所です。子孫の id を再帰的に取得し、深い側から順に destroy し、最後に親を destroy します。同じ走査は既定では soft-deleted を除外するため、削除済みの子孫は既定の問い合わせでは見えません。復元時にどの子孫が対象になりうるかは、この走査の指定に依存します。",
+      "evidence": {
+        "type": "model_method",
+        "path": "server/models/Collection.ts",
+        "symbol": "deleteDocument",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/models/Collection.ts",
+        "note": "deleteDocument は Document の findAllChildDocumentIds で子孫 id を取得し、breadth-first の結果を反転して深い側から 1 件ずつ destroy し、最後に対象文書を destroy します。この経路には Document.destroyWithCtx から入ります。findAllChildDocumentIds（server/models/Document.ts）は再帰 CTE で子孫を辿り、既定では deletedAt が null の行だけを対象とし、paranoid を無効にした場合のみ soft-deleted の子孫を返します。documents テーブルには「親の削除に伴って削除された」ことを示す列はなく、各文書は自身の deletedAt を持つだけです。"
+      }
+    },
+    {
+      "id": "surface.policy.document_restore",
+      "layer": "Policy",
+      "description": "復元・unarchive・削除の権限定義です。いずれも 1 件の文書に対する述語として定義され、文書ごとのメンバーシップ、または所属 collection に対する権限で評価されます。子孫をまとめて扱う権限の概念はここにありません。",
+      "evidence": {
+        "type": "policy_module",
+        "path": "server/policies/document.ts",
+        "symbol": "restore",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/policies/document.ts",
+        "note": "restore は guest でないこと、対象が削除済みであること、同一 team であること、および文書メンバーシップ（ReadWrite または Admin）か collection の updateDocument 権限のいずれかを要求します。unarchive は archivedAt がある文書に対して同様の条件を持ちます。permanentDelete は team admin を要求します。すべて対象文書 1 件を引数に取る述語であり、文書ごとに結果が異なりうることが定義から読み取れます。"
+      }
+    },
+    {
+      "id": "surface.task.deleted_document_cleanup",
+      "layer": "Background Task",
+      "description": "削除済み文書の保持と恒久削除です。各文書の deletedAt を個別に見て、一定期間を過ぎたものを恒久削除します。親子関係は考慮しないため、親より前に削除された子孫は、親より先に恒久削除されうる状態にあります。",
+      "evidence": {
+        "type": "background_task",
+        "path": "server/queues/tasks/CleanupDeletedDocumentsTask.ts",
+        "symbol": "CleanupDeletedDocumentsTask",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/queues/tasks/CleanupDeletedDocumentsTask.ts",
+        "note": "deletedAt が 30 日より前の文書を paranoid を無効にして取得し、documentPermanentDeleter へ渡します。抽出条件は各文書の deletedAt だけで、parentDocumentId や親の状態は条件に含まれません。cron は 1 時間間隔で、partition ごとに実行されます。"
+      }
+    },
+    {
+      "id": "surface.frontend.trash_restore",
+      "layer": "Frontend",
+      "description": "利用者から見た削除と復元です。削除ダイアログは、子孫がある場合に「入れ子の文書も一緒に削除される」ことを件数付きで明示します。復元アクションは対象文書に対して復元 API を呼ぶだけで、子孫に関する説明も選択肢も提示しません。",
+      "evidence": {
+        "type": "frontend_action",
+        "path": "app/actions/definitions/documents.tsx",
+        "symbol": "restoreDocument",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/app/actions/definitions/documents.tsx",
+        "note": "restoreDocument は対象文書の restore を呼び、成功時に「restored」を通知します。可視条件は collection が active であることと、restore または unarchive の権限があることです。子孫に関する分岐はありません。対照的に app/scenes/DocumentDelete.tsx は削除確認文で nested document の件数を数え、履歴と入れ子の文書が削除されることを明示します。ゴミ箱画面は app/scenes/Trash/index.tsx です。"
+      }
+    },
+    {
+      "id": "surface.test.restore_behavior",
+      "layer": "Test",
+      "description": "現在の復元・削除の振る舞いを固定している既存テストです。archive 済み文書の復元や、親が archive 済みの場合の復元は明示的に検証されていますが、削除済み文書の復元が子孫に及ぶことを検証するテストはありません。削除済み子孫の可視性を固定するテストは別にあります。",
+      "evidence": {
+        "type": "test_suite",
+        "path": "server/routes/api/documents/documents.test.ts",
+        "source": "https://github.com/outline/outline/blob/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5/server/routes/api/documents/documents.test.ts",
+        "note": "#documents.restore には、ゴミ箱の文書・下書き・削除済み collection からの復元、archive 済み文書の復元、親が archive 済みのときの復元、宛先 collection が archive 済み／削除済み／権限なしの場合の失敗が含まれます。削除済み文書の復元が子孫に及ぶことを表明するテストはこのリビジョンにありません。#documents.delete 側も、削除後の子孫の状態は表明していません。server/models/Document.test.ts の findAllChildDocumentIds のテストは、子を destroy したあと既定の呼び出しが空配列を返し、paranoid を無効にした場合だけその子の id を返すことを表明しています。"
+      }
+    }
+  ]
+}

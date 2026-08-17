@@ -2,7 +2,7 @@
 
 Forge は、Coding Agent がコードの変更を始める前に、実装に必要なコンテキストを整えます。人間の権限で判断すべき実装上の論点を、暗黙の前提として処理せず、明示的に扱えるようにします。
 
-> **状況:** 初期段階の公開コンセプトショーケースです。本リポジトリには、具体的なリファレンスケース、人手で整理したサンプル成果物、および一つの要件だけを扱う Ask Forge 公開 Demo を収録しています。一般のリポジトリを調査する完全な Forge 実装や本番システムではありません。
+> **状況:** 初期段階の公開コンセプトショーケースです。本リポジトリには、具体的なリファレンスケース、人手で整理したサンプル成果物、および 2 プロジェクト / 3 件の検証済み要件だけを扱う Ask Forge 公開 Demo を収録しています。一般のリポジトリを調査する完全な Forge 実装や本番システムではありません。
 
 ---
 
@@ -77,6 +77,18 @@ Forge の処理フローに沿って進めると、次のようになります�
 
 「まだ分かっていない」ことをそのまま未解決事項にすると、判断待ちの一覧が増えるだけで、決めるべきことが埋もれます。詳細は [docs/architecture.md](docs/architecture.md) の「権限の境界」を参照してください。
 
+**3 件目の要件例（別プロジェクト）:** *ゴミ箱から復元した文書の子文書も一緒に復元する。*（[examples/outline-restore-nested-documents](examples/outline-restore-nested-documents)）
+
+前の 2 件とは別のプロジェクトである [Outline](https://github.com/outline/outline)（TypeScript / Koa / Sequelize / React、リビジョン [`fb4ad4d`](https://github.com/outline/outline/tree/fb4ad4d0462e89f5764ed36a560adcd10b42e6f5)）を参照します。ここで確認したのは Context の抽出ではなく、**すでに用意された別プロジェクトの Artifact を、同じ Ask Forge の対話経路がプロジェクト固有の retrieval logic を足さずに消費できるか**です。追加したのは要件レジストリの 1 entry と 4 つの Artifact だけで、Outline 専用の route も分岐もありません。
+
+固定リビジョンで確認できる中心的な事実は、削除と復元の非対称です。文書をゴミ箱へ入れる soft delete は子孫へ cascade しますが、削除済み文書の復元は対象文書だけを戻します。一方、archive 側には子孫をまとめて復元する既存経路があります。
+
+- **これは現在の振る舞いを変える showcase 用の要件です。** Outline がこの仕様を持っていると主張するものではありません。現在の振る舞いは固定リビジョンのソースから確認した根拠で、目標の振る舞いと合意後パッケージの判断は公開 Demo のための入力です（`decided_by` は `showcase_human_decision`）。
+- **人間の判断を要する未解決事項は 2 件だけ** — どの削除済み子孫まで一緒に復元するか、親を復元できる利用者が子孫の復元権限も持つとみなすか。再帰の実装方法や問い合わせの書き方は、承認された振る舞いから導かれる実装上の影響として分けています。
+- **参照元のソースコードは複製していません。** 根拠はリポジトリ・リビジョン・相対パス・識別子・観測事実で表現しています。
+
+結果は [docs/evaluation.md](docs/evaluation.md) の H 節にあります。この例が示すのは、対話経路が 2 プロジェクト / 3 件の検証済み要件で成立したところまでです。任意のリポジトリを扱えること、Project Context schema がプロジェクト横断で一般化できることは、いずれもこの例の主張ではありません。
+
 ## 4. アーキテクチャ / 技術方針
 
 Forge は、大きく二種類のコンテキストを分離します。
@@ -116,11 +128,13 @@ functions/
   api/ask.js               — Pages Function の POST /api/ask
 migrations/                — D1 の利用量・監査テーブル
 examples/
-  petclinic/
+  petclinic/                        — 1 件目の要件（Spring PetClinic）
     requirement.md              — 要件例
     project_context.json        — 関連する実装範囲
     gaps.json                   — 合意前の、人間の権限による判断事項
     implementation_package.json — 判断後の引き継ぎ情報
+  petclinic-same-day-visit/         — 2 件目の要件（同じ参照プロジェクト）
+  outline-restore-nested-documents/ — 3 件目の要件（別プロジェクト / Outline）
 ```
 
 ## Ask Forge をローカルで動かす

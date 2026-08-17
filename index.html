@@ -305,13 +305,14 @@
             <a class="package-link" href="examples/petclinic/implementation_package.json">implementation_package.json を見る <span>↗</span></a>
           </div>
 
-          <p class="reference-summary">このケースでは 3 件の未決定事項を確認し、既存 Context 間の Conflict は検出されませんでした。同じ PetClinic に対する 2 件目の検証済み要件「当日の診療予約を登録できるようにする」では、承認される振る舞いを変える判断 2 件だけを未決定事項とし、実装方法の選択と、実装を妨げない検証事項は分けて記録しています。</p>
+          <p class="reference-summary">このケースでは 3 件の未決定事項を確認し、既存 Context 間の Conflict は検出されませんでした。同じ PetClinic に対する 2 件目の検証済み要件「当日の診療予約を登録できるようにする」では、承認される振る舞いを変える判断 2 件だけを未決定事項とし、実装方法の選択と、実装を妨げない検証事項は分けて記録しています。3 件目の検証済み要件は別プロジェクト（Outline）を参照し、削除は子文書へ波及するのに復元は対象の文書だけを戻す、という非対称を扱います。</p>
 
           <div class="text-links" aria-label="リファレンスリンク">
             <a href="README.md">README <span>↗</span></a>
             <a href="docs/architecture.md">architecture.md <span>↗</span></a>
             <a href="examples/petclinic/requirement.md">PetClinic artifacts / 市区町村検索 <span>↗</span></a>
             <a href="examples/petclinic-same-day-visit/requirement.md">PetClinic artifacts / 当日予約 <span>↗</span></a>
+            <a href="examples/outline-restore-nested-documents/requirement.md">Outline artifacts / 入れ子文書の復元 <span>↗</span></a>
             <a href="https://github.com/forge-context/forge-engineering-context">GitHub repository <span>↗</span></a>
           </div>
         </div>
@@ -324,17 +325,20 @@
               <p class="section-number">03 / LIVE REQUIREMENT CHECK</p>
               <h2>この要件について<br />Forge に確認する</h2>
             </div>
-            <p class="heading-note"><b>BOUNDED PUBLIC DEMO</b><br />公開済みの構造化 Artifact だけを、最大 2 ソースまで参照します。一般的な PetClinic の知識では補いません。</p>
+            <p class="heading-note"><b>BOUNDED PUBLIC DEMO</b><br />公開済みの構造化 Artifact だけを、最大 2 ソースまで参照します。参照プロジェクトに関する一般知識では補いません。</p>
           </div>
 
           <div class="ask-requirement" data-requirement-picker>
             <span>ACTIVE REQUIREMENT</span>
             <div class="requirement-tabs" role="tablist" aria-label="確認する要件を選ぶ">
               <button type="button" role="tab" data-requirement="owner-city-search">
-                <b>飼い主検索に市区町村の条件を追加する</b><code>owner-city-search</code>
+                <em>Spring PetClinic</em><b>飼い主検索に市区町村の条件を追加する</b><code>owner-city-search</code>
               </button>
               <button type="button" role="tab" data-requirement="same-day-visit">
-                <b>当日の診療予約を登録できるようにする</b><code>same-day-visit</code>
+                <em>Spring PetClinic</em><b>当日の診療予約を登録できるようにする</b><code>same-day-visit</code>
+              </button>
+              <button type="button" role="tab" data-requirement="outline-restore-nested-documents">
+                <em>Outline</em><b>ゴミ箱から復元した文書の子文書も一緒に復元する</b><code>outline-restore-nested-documents</code>
               </button>
             </div>
             <p class="requirement-note" data-requirement-note></p>

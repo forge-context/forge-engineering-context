@@ -20,6 +20,12 @@ const REQUIREMENTS = [
     summary: "翌日以降しか受け付けない診療予約を、当日にも広げる要件です。",
     basePath: "examples/petclinic-same-day-visit",
   },
+  {
+    id: "outline-restore-nested-documents",
+    label: "ゴミ箱から復元した文書の子文書も一緒に復元する",
+    summary: "削除は子文書へ波及するのに、復元は対象の文書だけを戻す非対称を変える要件です。",
+    basePath: "examples/outline-restore-nested-documents",
+  },
 ];
 
 // Retrievable per requirement. The route table in retrieval.js maps onto these names.

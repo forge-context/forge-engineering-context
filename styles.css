@@ -222,13 +222,14 @@ h2 { margin: 0; font-size: clamp(34px, 4vw, 54px); line-height: 1.25; letter-spa
 .ask-heading { margin-bottom: 48px; }
 .ask-requirement { display: grid; grid-template-columns: 190px 1fr; gap: 10px 24px; align-items: start; margin-bottom: 24px; padding: 20px 24px; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); background: var(--white); }
 .ask-requirement > span { grid-column: 1; grid-row: 1; padding-top: 7px; color: var(--accent); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .08em; }
-.requirement-tabs { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.requirement-tabs { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .requirement-tabs button { display: grid; gap: 5px; justify-items: start; padding: 12px 14px; border: 1px solid var(--line); background: var(--paper); color: #44515d; cursor: pointer; text-align: left; }
+.requirement-tabs button em { color: var(--muted); font-family: var(--mono); font-size: 9px; font-style: normal; letter-spacing: .07em; text-transform: uppercase; }
 .requirement-tabs button b { font-size: 13px; line-height: 1.5; }
-.requirement-tabs button code { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.requirement-tabs button code { color: var(--muted); font-family: var(--mono); font-size: 10px; overflow-wrap: anywhere; }
 .requirement-tabs button:hover, .requirement-tabs button:focus-visible { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
 .requirement-tabs button.is-active { border-color: var(--accent); background: var(--white); box-shadow: inset 3px 0 0 var(--accent); color: var(--ink); }
-.requirement-tabs button.is-active code { color: var(--accent); }
+.requirement-tabs button.is-active code, .requirement-tabs button.is-active em { color: var(--accent); }
 .requirement-note { grid-column: 2; grid-row: 2; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
 .ask-layout { display: grid; grid-template-columns: .88fr 1.12fr; border: 1px solid var(--line-strong); background: var(--white); }
 .ask-form { padding: 34px; border-right: 1px solid var(--line-strong); }

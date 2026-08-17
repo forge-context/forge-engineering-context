@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.1",
+  "artifact_stage": "post_alignment",
+  "provenance": "curated_showcase",
+  "requirement_id": "outline-restore-nested-documents",
+  "requirement_ref": "requirement.md",
+  "reference_revision": "fb4ad4d0462e89f5764ed36a560adcd10b42e6f5",
+  "note": "この Package の approved_target と human_decisions は、公開 Demo のために置いた showcase 上の決定です。参照リビジョンの Outline が持つ振る舞いでも、Outline の方針でもありません。現在の振る舞いは project_context.json を参照してください。",
+  "conflicts": [],
+  "status": "implementation_ready",
+  "approved_target": "削除済みの親文書を復元したとき、復元時点でその親の階層配下にあり復元対象として扱える削除済み子孫も一緒に復元します。cascade 復元の権限は親の復元操作を単位として扱い、子孫ごとの操作を利用者に求めません。これは demo 上で人が承認した目標の振る舞いであり、参照リビジョンの現在の振る舞いではありません。",
+  "human_decisions": [
+    {
+      "gap_ref": "gap.restore_scope",
+      "decided_by": "showcase_human_decision",
+      "decision": {
+        "restore_scope": "復元時点で親の階層配下にある削除済み子孫を一緒に復元する",
+        "individually_deleted_descendants": "cascade 由来かどうかを区別せず、階層配下にあるものは対象に含める",
+        "permanently_deleted_descendants": "既に恒久削除された子孫は対象外（復元可能な行が存在しない）"
+      },
+      "basis": {
+        "restore_scope": "showcase human decision — 公開 Demo のために人が承認した目標の振る舞いです。参照リビジョンの Outline の振る舞いでも、Outline の方針でもありません。",
+        "individually_deleted_descendants": "showcase human decision — 固定リビジョンには削除の由来を区別する標識がないため、区別しないことを demo 上の判断として選択しました。",
+        "permanently_deleted_descendants": "承認された復元範囲から導かれる帰結であり、新たな判断ではありません。"
+      }
+    },
+    {
+      "gap_ref": "gap.cascade_restore_authorization",
+      "decided_by": "showcase_human_decision",
+      "decision": {
+        "authorization_unit": "親の復元操作を単位として authorize する",
+        "per_descendant_prompt": "子孫ごとの操作を利用者に求めない"
+      },
+      "basis": {
+        "authorization_unit": "showcase human decision — 公開 Demo のために人が承認した目標の振る舞いです。archive 側の既存経路が子ごとに authorize していないという観測は参考にしましたが、それ自体は削除済み文書の復元に対する承認済み方針ではありません。",
+        "per_descendant_prompt": "承認された権限の単位から導かれる帰結であり、新たな判断ではありません。"
+      }
+    }
+  ],
+  "authority_boundary_applied": {
+    "blocking_human_decisions": 2,
+    "non_blocking_verifications": 1,
+    "derived_implementation_impacts": 5,
+    "note": "再帰の実装方法、問い合わせの書き方、transaction とイベントの粒度、文書構造への再接続、画面文言、テストの構成は人の判断に昇格させず、承認された振る舞いから導かれる実装上の影響として下記に記載しています。"
+  },
+  "implementation_surfaces": [
+    {
+      "surface_ref": "surface.model.document_restore_to",
+      "change": "削除済み文書の復元分岐を、承認された範囲に合わせて子孫も対象にする形へ変更します。archive 側の既存経路と同じ考え方を削除側にも適用しますが、archivedAt ではなく削除済みの子孫を対象にします。復元順序は、親を先に active に戻してから子孫を戻す形にし、親の状態を見て parentDocumentId を切り離す既存判定が意図せず働かないようにします。",
+      "derived_from": "impact.structure_reattachment"
+    },
+    {
+      "surface_ref": "surface.model.document_delete_cascade",
+      "change": "削除の cascade 自体は変更しません。復元側が対象とする削除済み子孫の取得にあたり、既定の子孫走査が soft-deleted を除外することを前提に、削除済みを含める指定を明示します。走査の具体的な実装方法は実装判断に委ねます。",
+      "derived_from": "impact.deleted_descendant_traversal"
+    },
+    {
+      "surface_ref": "surface.command.document_restorer",
+      "change": "権限確認は親の復元操作を単位とする決定に従い、対象文書に対する restore と宛先 collection に対する updateDocument の確認を維持します。子孫ごとの authorize は追加しません。transaction の境界とイベント発行の粒度は既存の枠組みに合わせ、実装判断に委ねます。",
+      "derived_from": "impact.restore_transaction_and_events"
+    },
+    {
+      "surface_ref": "surface.policy.document_restore",
+      "change": "変更なし — 権限の単位を親の復元操作としたため、文書単位の述語定義は変更しません。"
+    },
+    {
+      "surface_ref": "surface.route.document_restore",
+      "change": "変更なし — 入口の契約は維持します。復元範囲を選ぶ新しい入力は追加しません。"
+    },
+    {
+      "surface_ref": "surface.task.deleted_document_cleanup",
+      "change": "変更なし — 保持期間と恒久削除の条件は変更しません。恒久削除済みの子孫が復元されないことは、承認された範囲の帰結として受け入れます。"
+    },
+    {
+      "surface_ref": "surface.frontend.trash_restore",
+      "change": "復元アクションの画面表現を、承認された範囲に合わせて確認します。削除ダイアログには入れ子の文書の件数を示す既存の文言があるため、復元側の説明を置くかどうかと、その表現は実装判断に委ねます。",
+      "derived_from": "impact.frontend_restore_affordance"
+    },
+    {
+      "surface_ref": "surface.test.restore_behavior",
+      "change": "削除済み文書の復元が子孫に及ぶことを表明するテストを追加します。既定の子孫走査が soft-deleted を除外することを固定している既存テストと矛盾しない形にします。テストの置き場所と分割は実装判断に委ねます。",
+      "derived_from": "impact.test_extension",
+      "test_intents": [
+        "親と子と孫を作り、親をゴミ箱へ入れてから親を復元すると、子と孫も復元されて階層が戻ること",
+        "親の削除より前に個別に削除されていた子孫も、承認された範囲に従って復元されること",
+        "恒久削除された子孫がある階層でも、親の復元が失敗せずに完了すること",
+        "archive 済み文書の復元に関する既存の振る舞いが変わっていないこと",
+        "宛先 collection が active でない場合に復元が失敗する既存の振る舞いが変わっていないこと"
+      ]
+    }
+  ],
+  "delegated_verifications": [
+    {
+      "verification_ref": "verification.permanently_deleted_descendants",
+      "handling": "実装および QA で確認します。人の判断待ちではないため、この要件の実装開始を妨げません。",
+      "escalation_condition": "復元できなかった子孫を利用者へ明示的に通知することが要求された場合は、別要件として人の判断を求めます。"
+    }
+  ],
+  "handoff_note": "この合意後パッケージは、Coding Agent への入力を想定しています。復元範囲（階層配下の削除済み子孫を含める）と権限の単位（親の復元操作を単位とする）は上記 human_decisions に従って決定済みであり、再推論しません。これらは公開 Demo のために人が承認した目標の振る舞いであって、参照リビジョンの Outline の振る舞いではありません。削除済み子孫の走査方法、transaction とイベントの粒度、文書構造への再接続、画面文言、テストの構成は、承認された振る舞いから導かれる実装判断として Coding Agent に委ねます。保持期間を過ぎて恒久削除された子孫が復元できないことは、実装時および QA での確認事項です。"
+}

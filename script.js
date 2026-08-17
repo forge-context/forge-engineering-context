@@ -179,6 +179,23 @@ function askErrorMessage(status, data) {
 }
 // --- end ask error message ---------------------------------------------------
 
+// --- evidence location (pure) ------------------------------------------------
+// The human-readable location shown on an Evidence card. Language independent:
+// whatever the source extension is, it is dropped before a symbol is appended, so
+// `Document.ts` + `restoreTo` reads as `Document.restoreTo` and `Owner.java` +
+// `findByLastName` as `Owner.findByLastName`. A symbol that already carries the
+// file name — an API route name, for instance — is shown on its own rather than
+// repeated. Without a symbol the filename stands as recorded.
+function evidenceLocation(evidence) {
+  if (!evidence?.path) return "";
+  const filename = evidence.path.split("/").pop();
+  if (!evidence.symbol) return filename;
+  const base = filename.replace(/\.[^.]+$/, "");
+  const carriesBase = evidence.symbol === base || evidence.symbol.startsWith(`${base}.`);
+  return carriesBase ? evidence.symbol : `${base}.${evidence.symbol}`;
+}
+// --- end evidence location ---------------------------------------------------
+
 const askForge = document.querySelector("[data-ask-forge]");
 
 if (askForge) {
@@ -220,6 +237,17 @@ if (askForge) {
         "Human Alignment 後、Coding Agent には何を渡せますか？",
       ],
     },
+    "outline-restore-nested-documents": {
+      basePath: "examples/outline-restore-nested-documents",
+      note: "削除は子文書へ波及するのに、復元は対象の文書だけを戻す非対称を変える要件です。参照プロジェクトは Outline で、PetClinic とは別のプロジェクトです。",
+      presets: [
+        "親文書をゴミ箱から復元すると、子文書は現在どうなりますか？",
+        "この要件はどこに影響しますか？",
+        "実装前に人が決める必要があることは何ですか？",
+        "なぜ子文書の復元範囲を Forge は自動で決めなかったのですか？",
+        "Human Alignment 後、Coding Agent には何を渡せますか？",
+      ],
+    },
   };
 
   const picker = document.querySelector("[data-requirement-picker]");
@@ -255,13 +283,6 @@ if (askForge) {
     .filter((part) => !["ui", "api", "repository", "model", "test", "persistence"].includes(part.toLowerCase()))
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-
-  const evidenceLocation = (evidence) => {
-    if (!evidence?.path) return "";
-    const filename = evidence.path.split("/").pop();
-    const base = filename.endsWith(".java") ? filename.slice(0, -5) : filename;
-    return evidence.symbol ? `${base}.${evidence.symbol}` : base;
-  };
 
   const describeEvidence = (reference, artifact) => {
     const [source, locator = ""] = String(reference).split("#", 2);

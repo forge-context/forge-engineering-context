@@ -1,6 +1,6 @@
 # Ask Forge Public Demo v0.1 — Operations
 
-Ask Forge は Cloudflare Pages の静的 LP に、同一 Origin の `POST /api/ask` を加えた限定公開 Demo です。対応要件は `owner-city-search` と `same-day-visit` の 2 件です。Browser は `requirement_id` と 500 文字以内の `question` だけを送り、モデル、Prompt、Artifact、Endpoint、Token 上限は Pages Function が管理します。`requirement_id` は取得できる Artifact 集合を選択するため、未登録の値は retrieval と budget 予約の前に拒否します。
+Ask Forge は Cloudflare Pages の静的 LP に、同一 Origin の `POST /api/ask` を加えた限定公開 Demo です。対応要件は `owner-city-search`、`same-day-visit`、`outline-restore-nested-documents` の 3 件で、参照プロジェクトは 2 件（Spring PetClinic と Outline）です。Browser は `requirement_id` と 500 文字以内の `question` だけを送り、モデル、Prompt、Artifact、Endpoint、Token 上限は Pages Function が管理します。`requirement_id` は取得できる Artifact 集合を選択するため、未登録の値は retrieval と budget 予約の前に拒否します。
 
 対応要件の一覧は `scripts/generate_public_artifacts.mjs` の `REQUIREMENTS` が唯一の定義元です。ここに追加すると、生成される `functions/_lib/artifacts.generated.js` を経由して API と retrieval の両方に反映されます。生成時に各 Artifact の `requirement_id` が登録 ID と一致することを検証し、一致しない場合はビルドが失敗します。
 
@@ -51,6 +51,13 @@ Cache key は request origin 上の内部 URL で、SHA-256 の入力は `requir
 Cache 参照は client rate limit と入力 validation の後、global budget 予約の前に行います。HIT では Bailian を呼ばず token budget も消費しません。TTL は 24 時間（`max-age=86400`）です。Cache するのは retrieval が正常終了した grounded response だけで、同じ requirement/context revision に紐づく決定論的な insufficient も含みます。Upstream error、malformed response、rate limit と global budget の 429、validation error は cache しません。保存するのは公開応答と route などの trace 断片だけで、request ID、secret、内部 Prompt、Artifact 本文、client 情報は含みません。Cache が利用できない環境では常に MISS として動作します。
 
 Cloudflare の runtime cache は data center ごとで、global に共有されるものでも永続でもありません。TTL 前に evict されることがあり、その場合は通常どおり MISS として Bailian を呼びます。
+
+### Prompt version の変更履歴
+
+`PROMPT_VERSION` は cache key の入力なので、値を上げると既存の cache entry は参照されなくなります（deploy 直後は全 MISS、TTL 内に自然と入れ替わります）。D1 の schema 変更や migration は不要です。
+
+- `retrieval-routing-v0.4/controller-v0.2` → `retrieval-routing-v0.5/controller-v0.2`：3 件目の要件（別プロジェクト）追加にあわせて synthesis prompt から参照プロジェクト固有の表現を外し、project-neutral な表現に変更。あわせて、2 件目のプロジェクトで露出した二つの曖昧さを解消（Evidence citation は取得した Artifact 名で行い Artifact 内部の source path は citation にしないこと、`insufficient` でも欠けている context の明示と citation を省略しないこと）。deterministic controller は変更していません。
+- `retrieval-routing-v0.5/controller-v0.2` → `retrieval-routing-v0.6/controller-v0.2`：2 件目のプロジェクトの qualification が、対象アプリケーションの Human Decision に関する質問と Forge 自身の設計に関する質問の意味境界の曖昧さを露出させたため、router prompt の route 定義を質問の主題で切り直しました。route 表と source mapping、deterministic controller、token 上限は変更していません。
 
 ## Audit trace
 
