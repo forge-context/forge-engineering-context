@@ -6,9 +6,16 @@ import {
 } from "./artifacts.generated.js";
 import { MalformedModelResponseError } from "./bailian.js";
 
-// Bump whenever ROUTER_SYSTEM, SYNTHESIS_SYSTEM, or the deterministic controller
-// changes: it is a cache-key input, so a stale value would serve outdated answers.
-export const PROMPT_VERSION = "retrieval-routing-v0.3/controller-v0.2";
+// Bump whenever ROUTER_SYSTEM, SYNTHESIS_SYSTEM, the grounded token budget, or the
+// deterministic controller changes: it is a cache-key input, so a stale value would
+// serve answers produced under a different configuration.
+export const PROMPT_VERSION = "retrieval-routing-v0.4/controller-v0.2";
+
+// Grounded synthesis output budget. Raised from 600 after an observed truncation:
+// impact_scope on a requirement with six surfaces stopped with finish_reason
+// `length` at ~613 output tokens, leaving unparseable JSON. Sized to clear that
+// observed ceiling, not opened up — the router step keeps its own small budget.
+const GROUNDED_MAX_TOKENS = 1000;
 
 export const ROUTE_SOURCES = Object.freeze({
   current_behavior: "project_context.json",
@@ -92,37 +99,51 @@ function artifactText(artifacts, name) {
   return typeof artifact === "string" ? artifact : JSON.stringify(artifact);
 }
 
-function validateRouting(value) {
+// A contract failure happens after the call's usage has already been counted, so
+// the error carries no usage of its own — only the stage and the call's finish
+// reason, which together separate "model wrote the wrong shape" from "the response
+// never parsed".
+function contractViolation(call) {
+  return new MalformedModelResponseError({
+    stage: "contract_validation",
+    finishReason: call?.finishReason,
+  });
+}
+
+function validateRouting(call) {
+  const value = call.result;
   const route = value?.route;
   if (!ROUTE_SOURCES[route] || value.primary_source !== ROUTE_SOURCES[route]) {
-    throw new MalformedModelResponseError();
+    throw contractViolation(call);
   }
   return route;
 }
 
-function validateDecision(value, retrieved, canRetrieveMore) {
+function validateDecision(call, retrieved, canRetrieveMore) {
+  const value = call.result;
+  const fail = () => contractViolation(call);
   if (!value || !ALLOWED_SUFFICIENCY.has(value.sufficiency) || typeof value.answer !== "string") {
-    throw new MalformedModelResponseError();
+    throw fail();
   }
   if (!Array.isArray(value.evidence) || value.evidence.some((item) => typeof item !== "string")) {
-    throw new MalformedModelResponseError();
+    throw fail();
   }
   if (value.sufficiency !== "partial" && value.evidence.length === 0) {
-    throw new MalformedModelResponseError();
+    throw fail();
   }
   for (const citation of value.evidence) {
-    if (!retrieved.includes(citation.split("#", 1)[0])) throw new MalformedModelResponseError();
+    if (!retrieved.includes(citation.split("#", 1)[0])) throw fail();
   }
   const additional = value.additional_source;
   if (value.sufficiency === "partial" && additional != null) {
     if (!canRetrieveMore || !SOURCE_NAMES.has(additional) || retrieved.includes(additional)) {
-      throw new MalformedModelResponseError();
+      throw fail();
     }
     if (typeof value.additional_reason !== "string" || !value.additional_reason.trim()) {
-      throw new MalformedModelResponseError();
+      throw fail();
     }
   } else if (additional != null || value.additional_reason != null) {
-    throw new MalformedModelResponseError();
+    throw fail();
   }
 }
 
@@ -265,7 +286,7 @@ async function groundedStep(client, artifacts, question, route, retrieved, canRe
     : "No more retrieval is allowed; additional_source and additional_reason must be null.";
   const blocks = retrieved.map((name) => `--- ${name} ---\n${artifactText(artifacts, name)}`).join("\n\n");
   return client.complete({
-    maxTokens: 600,
+    maxTokens: GROUNDED_MAX_TOKENS,
     messages: [
       { role: "system", content: SYNTHESIS_SYSTEM },
       {
@@ -296,14 +317,14 @@ export async function runRetrieval(question, client, requirementId = DEFAULT_REQ
       ],
     });
     addUsage(usage, routed);
-    const route = validateRouting(routed.result);
+    const route = validateRouting(routed);
     const primarySource = ROUTE_SOURCES[route];
     const retrieved = [primarySource];
     Object.assign(progress, { questionType: route, route, primarySource });
 
     const first = await groundedStep(client, artifacts, question, route, retrieved, true);
     addUsage(usage, first);
-    validateDecision(first.result, retrieved, true);
+    validateDecision(first, retrieved, true);
     const initialModelSufficiency = first.result.sufficiency;
     progress.modelSufficiency = initialModelSufficiency;
     let { decision, warnings } = enforceController(artifacts, question, route, first.result, retrieved, true);
@@ -323,7 +344,7 @@ export async function runRetrieval(question, client, requirementId = DEFAULT_REQ
       retrieved.push(additionalSource);
       const second = await groundedStep(client, artifacts, question, route, retrieved, false);
       addUsage(usage, second);
-      validateDecision(second.result, retrieved, false);
+      validateDecision(second, retrieved, false);
       modelSufficiency = second.result.sufficiency;
       const enforced = enforceController(artifacts, question, route, second.result, retrieved, false);
       decision = enforced.decision;
@@ -355,6 +376,10 @@ export async function runRetrieval(question, client, requirementId = DEFAULT_REQ
       usage,
     };
   } catch (error) {
+    // A call that failed inside the client never reached addUsage, so its tokens
+    // would otherwise be spent but unreported. Errors raised after a successful
+    // call carry no callUsage, which keeps this from double counting.
+    if (error?.callUsage) addUsage(usage, { usage: error.callUsage, latencyMs: error.callLatencyMs });
     error.usage = usage;
     error.retrievalTrace = progress;
     throw error;

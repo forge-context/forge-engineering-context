@@ -21,8 +21,8 @@ const DATABASE = "ask-forge-demo";
 
 // Kept on one line: the --remote path rejects a --command containing newlines.
 const SELECT_COLUMNS =
-  "created_at, route, result_status, upstream_error_kind, final_sufficiency, cache_status, model_called, " +
-  "total_tokens, latency_ms, " +
+  "created_at, route, result_status, upstream_error_kind, upstream_failure_stage, upstream_finish_reason, " +
+  "final_sufficiency, cache_status, model_called, total_tokens, latency_ms, " +
   "CASE WHEN additional_source IS NULL OR additional_source = '' THEN 0 ELSE 1 END AS additional_retrieval, " +
   "guardrails_triggered";
 
@@ -141,9 +141,11 @@ export function summarize(rows) {
     blockedRateLimit: 0,
     blockedGlobalBudget: 0,
     upstreamError: 0,
-    // Safe failure categories only; legacy rows written before migration 0003
-    // carry no kind and are counted as "(none)".
+    // Safe failure categories only; legacy rows written before migrations 0003 and
+    // 0004 carry no kind or stage and are counted as "(none)".
     upstreamErrorKind: {},
+    upstreamFailureStage: {},
+    upstreamFinishReason: {},
   };
 
   const allLatencies = [];
@@ -183,8 +185,12 @@ export function summarize(rows) {
     if (resultStatus === "blocked_global_budget") summary.blockedGlobalBudget += 1;
     if (resultStatus === "upstream_error") {
       summary.upstreamError += 1;
-      const kind = row.upstream_error_kind;
-      bump(summary.upstreamErrorKind, kind == null || kind === "" ? "(none)" : String(kind));
+      const label = (value) => (value == null || value === "" ? "(none)" : String(value));
+      bump(summary.upstreamErrorKind, label(row.upstream_error_kind));
+      // Only a parsing failure carries a stage, so the breakdown stays empty for
+      // network, timeout and quota failures rather than reporting "(none)" noise.
+      if (row.upstream_failure_stage) bump(summary.upstreamFailureStage, String(row.upstream_failure_stage));
+      if (row.upstream_finish_reason) bump(summary.upstreamFinishReason, String(row.upstream_finish_reason));
     }
   }
 
@@ -213,6 +219,13 @@ function counts(label, counter) {
   const entries = Object.entries(counter).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
   if (!entries.length) return [`${label}: (none)`];
   return [`${label}:`, ...entries.map(([key, value]) => `  ${key}: ${value}`)];
+}
+
+// A nested breakdown under an existing block; omitted entirely when nothing applies.
+function indented(label, counter) {
+  const entries = Object.entries(counter).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  if (!entries.length) return [];
+  return [`  ${label}:`, ...entries.map(([key, value]) => `    ${key}: ${value}`)];
 }
 
 export function formatSummary(summary, context = {}) {
@@ -262,7 +275,14 @@ export function formatSummary(summary, context = {}) {
     `  blocked_global_budget: ${summary.blockedGlobalBudget}`,
     `  upstream_error: ${summary.upstreamError}`,
     // Only categories actually observed are listed; a kind with no occurrence is omitted.
-    ...(summary.upstreamError ? ["", ...counts("upstream errors", summary.upstreamErrorKind)] : []),
+    ...(summary.upstreamError
+      ? [
+        "",
+        ...counts("upstream errors", summary.upstreamErrorKind),
+        ...indented("failure stage", summary.upstreamFailureStage),
+        ...indented("finish reason", summary.upstreamFinishReason),
+      ]
+      : []),
   ];
   return lines.join("\n");
 }

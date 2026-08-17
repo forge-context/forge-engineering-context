@@ -95,10 +95,24 @@ out-of-scope の判定は決定論的な scope gate で行うため、model を�
 
 - 1 回だけ再試行し、2 回とも同じ段階で失敗しました（router call のみの 198 tokens を消費、`result_status = upstream_error`、`guardrails_triggered = fail_safe_upstream`）。
 - Client 側には Cloudflare edge の非 JSON 502 が返っていました。API 自身の safe JSON error ではないため、画面に表示できる情報は HTTP status だけです。
-- **この failure の原因は特定できていません。** 実行時の production は `upstream_error_kind` 追加前の code であり、remote audit には `result_status = upstream_error` までしか残っていないためです。observability を追加する過程で、開発環境では類似の signature（routing 成功後、router 分の token だけを消費して synthesis 段で失敗）を持つ `malformed_model_json` を観測していますが、環境も実行経路も異なるため、この production failure が同一原因であるとは判断していません。`network` / `timeout` / `api` / `malformed_model_json` のいずれであったかは、記録が存在しない以上、事後に確定できません。
-- この「後から原因を分類できない」状態そのものが、`upstream_error_kind`（migration `0003`）を追加した理由です。適用後は同種の failure が category として audit に残ります。
+- **この 2 row 自体の原因は、事後には確定できません。** 実行時の production は `upstream_error_kind` 追加前の code であり、remote audit には `result_status = upstream_error` までしか残っていないためです。この「後から原因を分類できない」状態そのものが、`upstream_error_kind`（migration `0003`）を追加した理由です。
 
-したがってこの qualification が示すのは、`same-day-visit` でも根拠と権限の境界が保たれること、および upstream failure が誤った回答ではなく fail-safe として現れることです。upstream failure の原因分類は、observability を適用した以降の観測を待つ必要があります。
+### 追跡調査で判明した failure mechanism
+
+その後、失敗段階（`upstream_failure_stage`）と `finish_reason` を audit に残す diagnostics を追加し（migration `0004`）、同じ requirement・同じ質問を実 model path で 1 回実行したところ、failure を再現したうえで次を観測しました。
+
+| 観測項目 | 観測値 |
+| --- | --- |
+| `upstream_error_kind` | `malformed_model_json` |
+| `upstream_failure_stage` | `content_json` |
+| `upstream_finish_reason` | `length` |
+| output tokens（router + grounded） | 646 |
+
+grounded synthesis の出力が token 上限（600）に達して打ち切られ、途中で切れた JSON が parse できずに失敗していました。上限を 1,000 に引き上げたところ、同じ質問が `sufficient` で完了し、grounded 出力は 827 tokens でした。**上限 600 では構造的に収まらない出力だった**ことになります。
+
+この mechanism は、上記 2 row と route・primary_source・失敗段階・token 消費パターンが一致します。ただし当該 row 自体には metadata が残っていないため、同一原因であったと断定はしません。
+
+したがってこの qualification が示すのは、`same-day-visit` でも根拠と権限の境界が保たれること、および upstream failure が誤った回答ではなく fail-safe として現れることです。
 
 ## H. Current Limitations
 

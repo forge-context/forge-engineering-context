@@ -52,7 +52,12 @@
       "upstream_error_kind": null,
       "cause_determined": false,
       "observation": "2 回とも routing 段（router call のみ 198 tokens）の後、grounded synthesis 段で upstream failure。Client には Cloudflare edge の非 JSON 502 が返り、Function 側は fail-safe で応答を生成せず audit に記録した。evaluation correctness failure ではない（誤った route も、根拠のない回答も出していない）。",
-      "cause_note": "原因は特定できていない。実行時の production は upstream_error_kind 追加前の code で、remote audit には result_status = upstream_error までしか残っていない。開発環境で類似 signature の malformed_model_json を観測しているが、環境も実行経路も異なるため同一原因とは判断しない。記録が存在しない以上、network / timeout / api / malformed_model_json のいずれであったかは事後に確定できない。"
+      "cause_note": "この row 自体の原因は事後に確定できない。実行時の production は upstream_error_kind 追加前の code で、remote audit には result_status = upstream_error までしか残っていない。",
+      "followup": {
+        "date": "2026-08-17",
+        "finding": "diagnostics 追加後、同じ requirement・同じ質問を実 model path で 1 回実行して failure を再現。upstream_failure_stage = content_json、upstream_finish_reason = length、output tokens 646 を観測。grounded synthesis の出力が token 上限 600 で打ち切られ、途中で切れた JSON が parse できずに失敗していた。上限を 1000 に引き上げた後は sufficient で完了し、grounded 出力は 827 tokens。",
+        "same_cause_as_this_row": "断定しない（route・primary_source・失敗段階・token 消費パターンは一致するが、この row には metadata が残っていない）"
+      }
     },
     {
       "id": "C",

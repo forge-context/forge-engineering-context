@@ -114,10 +114,16 @@ const FIXTURE_ROWS = [
   },
 ];
 
-// Upstream failures from before migration 0003, and after it.
+// Upstream failures from before migrations 0003 / 0004, and after them.
 const UPSTREAM_ROWS = [
   { created_at: "2026-08-16T02:00:00.000Z", result_status: "upstream_error", upstream_error_kind: "api" },
-  { created_at: "2026-08-16T02:01:00.000Z", result_status: "upstream_error", upstream_error_kind: "malformed_model_json" },
+  {
+    created_at: "2026-08-16T02:01:00.000Z",
+    result_status: "upstream_error",
+    upstream_error_kind: "malformed_model_json",
+    upstream_failure_stage: "content_json",
+    upstream_finish_reason: "length",
+  },
   { created_at: "2026-08-16T02:02:00.000Z", result_status: "upstream_error", upstream_error_kind: "internal" },
   { created_at: "2026-08-16T02:03:00.000Z", result_status: "upstream_error", upstream_error_kind: null },
   { created_at: "2026-08-16T02:04:00.000Z", result_status: "success", upstream_error_kind: null },
@@ -183,14 +189,28 @@ test("upstream failures are counted per safe error kind", () => {
     "(none)": 1,
   });
 
+  // A parsing failure is broken down further; transport failures add no stage noise.
+  assert.deepEqual(summary.upstreamFailureStage, { content_json: 1 });
+  assert.deepEqual(summary.upstreamFinishReason, { length: 1 });
+
   const output = formatSummary(summary);
   assert.match(output, /upstream errors:/);
   assert.match(output, /malformed_model_json: 2/);
   assert.match(output, /api: 1/);
+  assert.match(output, /failure stage:\n {4}content_json: 1/);
+  assert.match(output, /finish reason:\n {4}length: 1/);
   // Kinds that never occurred are not printed, and the existing totals stay.
   assert.doesNotMatch(output, /timeout|quota|authentication/);
   assert.match(output, /upstream_error: 5/);
   assert.match(output, /total requests: 13/);
+});
+
+test("a failure with no parsing stage prints no stage breakdown", () => {
+  const output = formatSummary(summarize([
+    { created_at: "2026-08-16T03:00:00.000Z", result_status: "upstream_error", upstream_error_kind: "timeout" },
+  ]));
+  assert.match(output, /timeout: 1/);
+  assert.doesNotMatch(output, /failure stage|finish reason/);
 });
 
 test("a table without upstream failures prints no kind breakdown", () => {

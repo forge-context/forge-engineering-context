@@ -98,8 +98,9 @@ export function createD1Store(db) {
              question_type, route, primary_source, additional_source, additional_reason,
              model_sufficiency, final_sufficiency, guardrails_triggered,
              validation_warnings, input_tokens, output_tokens, total_tokens,
-             latency_ms, result_status, upstream_error_kind, cache_status, model_called
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             latency_ms, result_status, upstream_error_kind, upstream_failure_stage,
+             upstream_finish_reason, cache_status, model_called
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           trace.requestId,
@@ -122,6 +123,8 @@ export function createD1Store(db) {
           trace.latencyMs || 0,
           trace.resultStatus,
           trace.upstreamErrorKind || null,
+          trace.upstreamFailureStage || null,
+          trace.upstreamFinishReason || null,
           trace.cacheStatus || "bypass",
           trace.modelCalled ? 1 : 0,
         )

@@ -4,7 +4,14 @@ import assert from "node:assert/strict";
 import { handleAskRequest } from "../functions/_lib/service.js";
 import { runRetrieval } from "../functions/_lib/retrieval.js";
 import { REQUIREMENTS } from "../functions/_lib/artifacts.generated.js";
-import { classifyUpstreamError, UpstreamError, UPSTREAM_ERROR_KINDS } from "../functions/_lib/bailian.js";
+import {
+  classifyUpstreamError,
+  createBailianClient,
+  MalformedModelResponseError,
+  safeFinishReason,
+  UpstreamError,
+  UPSTREAM_ERROR_KINDS,
+} from "../functions/_lib/bailian.js";
 
 const ENV = {
   BAILIAN_API_KEY: "test-secret-never-log",
@@ -288,6 +295,168 @@ test("an unexpected exception is audited as internal and leaks nothing", async (
   // Neither the audit row nor the public response may carry the raw exception.
   assert.doesNotMatch(JSON.stringify(audit), /boom|service\.js|test-secret-never-log/);
   assert.doesNotMatch(JSON.stringify(result.body), /boom|service\.js|test-secret-never-log/);
+});
+
+// --- Malformed grounded response diagnosis ----------------------------------
+// A malformed response must stay diagnosable from safe metadata alone: which
+// parsing stage failed, how the model stopped, and what the call actually cost.
+
+// Builds a client over a stubbed fetch so the real staged parsing runs.
+function clientOverBody(body, { status = 200, contentType = "application/json" } = {}) {
+  const env = { ...ENV };
+  return createBailianClient(env, async () => new Response(body, {
+    status,
+    headers: { "Content-Type": contentType },
+  }));
+}
+
+function completion(content, { finishReason = "stop", usage } = {}) {
+  return JSON.stringify({
+    choices: [{ finish_reason: finishReason, message: { content } }],
+    usage: usage || { prompt_tokens: 2100, completion_tokens: 600, total_tokens: 2700 },
+  });
+}
+
+test("Case A: content truncated mid-JSON is reported as a content_json failure", async () => {
+  const truncated = '{"sufficiency":"sufficient","answer":"影響範囲です。","impact_items":[';
+  const client = clientOverBody(completion(truncated, { finishReason: "length" }));
+
+  const error = await client.complete({ messages: [], maxTokens: 600 }).then(
+    () => null,
+    (thrown) => thrown,
+  );
+
+  assert.ok(error instanceof MalformedModelResponseError);
+  assert.equal(error.kind, "malformed_model_json");
+  assert.equal(error.parsingStage, "content_json");
+  assert.equal(error.finishReason, "length");
+  // The tokens the truncated call actually consumed are preserved, not lost.
+  assert.deepEqual(error.callUsage, { inputTokens: 2100, outputTokens: 600, totalTokens: 2700 });
+  assert.ok(error.callLatencyMs >= 0);
+  // Nothing of the model output survives on the error.
+  assert.doesNotMatch(JSON.stringify({ ...error, message: error.message }), /sufficiency|影響範囲|impact_items/);
+});
+
+test("Case A: a truncated grounded call still reports its tokens in the audit row", async () => {
+  const store = makeStore();
+  const truncated = '{"sufficiency":"sufficient","answer":"影響範囲です。","impact_items":[';
+  let call = 0;
+  const client = {
+    async complete() {
+      call += 1;
+      // The router call succeeds; the grounded call is truncated inside the client.
+      if (call === 1) {
+        return {
+          result: { route: "impact_scope", primary_source: "project_context.json", reason: "impact" },
+          usage: { inputTokens: 165, outputTokens: 33, totalTokens: 198 },
+          latencyMs: 2100,
+          finishReason: "stop",
+        };
+      }
+      await clientOverBody(completion(truncated, { finishReason: "length" }))
+        .complete({ messages: [], maxTokens: 600 });
+      throw new Error("unreachable");
+    },
+  };
+
+  const result = await responseJson(await handleAskRequest(
+    makeRequest("この要件はどこに影響しますか？", SAME_DAY), ENV, { store, client },
+  ));
+
+  assert.equal(result.status, 502);
+  const audit = store.calls.audit[0];
+  assert.equal(audit.resultStatus, "upstream_error");
+  assert.equal(audit.upstreamErrorKind, "malformed_model_json");
+  assert.equal(audit.upstreamFailureStage, "content_json");
+  assert.equal(audit.upstreamFinishReason, "length");
+  assert.equal(audit.route, "impact_scope");
+  assert.equal(audit.primarySource, "project_context.json");
+  // Router 198 + grounded 2700: the grounded call is no longer invisible.
+  assert.equal(audit.totalTokens, 2898);
+  assert.equal(audit.outputTokens, 633);
+  assert.ok(audit.latencyMs >= 2100);
+  // The reconciled budget sees the same real usage.
+  assert.equal(store.calls.reconcile[0].usage.totalTokens, 2898);
+});
+
+test("Case B: valid JSON that breaks the contract is a contract_validation failure", async () => {
+  const store = makeStore();
+  const client = scriptedClient([
+    { route: "impact_scope", primary_source: "project_context.json", reason: "impact" },
+    { foo: "bar" },
+  ]);
+  const result = await responseJson(await handleAskRequest(
+    makeRequest("この要件はどこに影響しますか？", SAME_DAY), ENV, { store, client },
+  ));
+
+  assert.equal(result.status, 502);
+  const audit = store.calls.audit[0];
+  assert.equal(audit.upstreamErrorKind, "malformed_model_json");
+  // Distinguishable from Case A: the content parsed, the shape was wrong.
+  assert.equal(audit.upstreamFailureStage, "contract_validation");
+  // Both calls succeeded upstream, so both are already counted once.
+  assert.equal(audit.totalTokens, 30);
+});
+
+test("Case C: a body that is not JSON is an upstream_json failure and is not stored", async () => {
+  const client = clientOverBody("<html><body>error code: 502 cf-ray 900abc</body></html>", {
+    contentType: "text/html",
+  });
+
+  const error = await client.complete({ messages: [], maxTokens: 600 }).then(
+    () => null,
+    (thrown) => thrown,
+  );
+
+  assert.ok(error instanceof MalformedModelResponseError);
+  assert.equal(error.parsingStage, "upstream_json");
+  assert.equal(error.finishReason, null);
+  assert.equal(error.callUsage, null);
+  assert.doesNotMatch(JSON.stringify({ ...error, message: error.message }), /html|cf-ray|900abc/);
+});
+
+test("a JSON body without usable content is an upstream_shape failure", async () => {
+  const client = clientOverBody(JSON.stringify({ choices: [{ finish_reason: "stop", message: {} }] }));
+  const error = await client.complete({ messages: [], maxTokens: 600 }).catch((thrown) => thrown);
+  assert.equal(error.parsingStage, "upstream_shape");
+});
+
+test("diagnostic categories stay closed sets", () => {
+  assert.equal(safeFinishReason("length"), "length");
+  assert.equal(safeFinishReason(null), null);
+  // An unexpected upstream string never reaches the audit row verbatim.
+  assert.equal(safeFinishReason("blocked by policy: api-key sk-live-123"), "other");
+  assert.equal(new MalformedModelResponseError({ stage: "raw content here" }).parsingStage, null);
+  assert.equal(new MalformedModelResponseError().parsingStage, null);
+});
+
+test("a non-malformed upstream failure records no parsing diagnostics", async () => {
+  const store = makeStore();
+  const client = scriptedClient([new UpstreamError("timeout", "回答の生成がタイムアウトしました。", 504)]);
+  await handleAskRequest(makeRequest("現在の検索はどう動いていますか？"), ENV, { store, client });
+  const audit = store.calls.audit[0];
+  assert.equal(audit.upstreamErrorKind, "timeout");
+  assert.equal(audit.upstreamFailureStage, null);
+  assert.equal(audit.upstreamFinishReason, null);
+});
+
+test("every UpstreamError still reaches the client as a safe JSON response", async () => {
+  const failures = [
+    new UpstreamError("timeout", "回答の生成がタイムアウトしました。", 504),
+    new UpstreamError("api", "現在 Ask Forge を利用できません。", 502),
+    new MalformedModelResponseError({ stage: "content_json", finishReason: "length" }),
+  ];
+  for (const failure of failures) {
+    const response = await handleAskRequest(makeRequest("現在の検索はどう動いていますか？"), ENV, {
+      store: makeStore(),
+      client: scriptedClient([failure]),
+    });
+    assert.equal(response.headers.get("Content-Type"), "application/json; charset=utf-8");
+    const body = await response.json();
+    assert.deepEqual(Object.keys(body).sort(), ["error", "request_id"]);
+    assert.equal(body.error, failure.publicMessage);
+    assert.equal(response.status, failure.status);
+  }
 });
 
 test("classification only ever returns an allowlisted category", () => {
