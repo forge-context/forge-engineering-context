@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { handleAskRequest } from "../functions/_lib/service.js";
 import { runRetrieval } from "../functions/_lib/retrieval.js";
 import { REQUIREMENTS } from "../functions/_lib/artifacts.generated.js";
+import { classifyUpstreamError, UpstreamError, UPSTREAM_ERROR_KINDS } from "../functions/_lib/bailian.js";
 
 const ENV = {
   BAILIAN_API_KEY: "test-secret-never-log",
@@ -243,6 +244,71 @@ test("malformed model response fails safely without retry", async () => {
   assert.equal(client.calls, 1);
   assert.equal(store.calls.reconcile.length, 1);
   assert.equal(store.calls.audit[0].resultStatus, "upstream_error");
+  assert.equal(store.calls.audit[0].upstreamErrorKind, "malformed_model_json");
+});
+
+// --- Upstream observability -------------------------------------------------
+// A failed request must stay classifiable from the audit table alone, while the
+// stored classification stays a fixed category and never upstream detail.
+
+test("each upstream failure kind is audited as its own safe category", async () => {
+  const cases = [
+    [new UpstreamError("timeout", "回答の生成がタイムアウトしました。", 504), "timeout", 504],
+    [new UpstreamError("network", "現在 Ask Forge に接続できません。", 502), "network", 502],
+    [new UpstreamError("authentication", "Ask Forge の設定を確認しています。", 502), "authentication", 502],
+    [new UpstreamError("quota", "現在 Ask Forge が混み合っています。", 503), "quota", 503],
+    [new UpstreamError("api", "現在 Ask Forge を利用できません。", 502), "api", 502],
+  ];
+  for (const [error, expectedKind, expectedStatus] of cases) {
+    const store = makeStore();
+    const client = scriptedClient([error]);
+    const result = await responseJson(await handleAskRequest(
+      makeRequest("現在の検索はどう動いていますか？"), ENV, { store, client },
+    ));
+    assert.equal(result.status, expectedStatus);
+    assert.equal(store.calls.audit[0].resultStatus, "upstream_error");
+    assert.equal(store.calls.audit[0].upstreamErrorKind, expectedKind);
+    assert.equal(result.body.error, error.publicMessage, "the public error response is unchanged");
+  }
+});
+
+test("an unexpected exception is audited as internal and leaks nothing", async () => {
+  const store = makeStore();
+  const secret = "boom at /srv/forge/service.js:42 key=test-secret-never-log";
+  const client = { async complete() { throw new TypeError(secret); } };
+  const result = await responseJson(await handleAskRequest(
+    makeRequest("現在の検索はどう動いていますか？"), ENV, { store, client },
+  ));
+
+  assert.equal(result.status, 500);
+  assert.equal(result.body.error, "現在 Ask Forge を利用できません。");
+  const audit = store.calls.audit[0];
+  assert.equal(audit.resultStatus, "upstream_error");
+  assert.equal(audit.upstreamErrorKind, "internal");
+  // Neither the audit row nor the public response may carry the raw exception.
+  assert.doesNotMatch(JSON.stringify(audit), /boom|service\.js|test-secret-never-log/);
+  assert.doesNotMatch(JSON.stringify(result.body), /boom|service\.js|test-secret-never-log/);
+});
+
+test("classification only ever returns an allowlisted category", () => {
+  for (const kind of UPSTREAM_ERROR_KINDS) {
+    assert.equal(classifyUpstreamError(new UpstreamError(kind, "safe", 502)), kind);
+  }
+  // An unlisted kind, a plain Error and a non-error value all collapse to internal.
+  assert.equal(classifyUpstreamError(new UpstreamError("raw response body", "safe", 502)), "internal");
+  assert.equal(classifyUpstreamError(new Error("network")), "internal");
+  assert.equal(classifyUpstreamError(null), "internal");
+});
+
+test("a successful request records no upstream error kind", async () => {
+  const store = makeStore();
+  const client = scriptedClient(CURRENT_BEHAVIOR_TURN);
+  const result = await responseJson(await handleAskRequest(
+    makeRequest("現在の検索はどう動いていますか？"), ENV, { store, client },
+  ));
+  assert.equal(result.status, 200);
+  assert.equal(store.calls.audit[0].resultStatus, "success");
+  assert.equal(store.calls.audit[0].upstreamErrorKind, null);
 });
 
 test("audit contains route, usage, and no API key or raw IP", async () => {
@@ -560,6 +626,35 @@ test("the same question under a different requirement is not served from the oth
   assert.equal(caches.entries.size, 2);
   assert.notEqual(second.body.answer, first.body.answer);
   assert.deepEqual(store.calls.audit.map((audit) => audit.cacheStatus), ["miss", "miss"]);
+});
+
+// The browser bundle is a classic script, so the pure part under test is marked in
+// script.js and evaluated here in isolation rather than by loading the whole file.
+async function loadAskErrorMessage() {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const block = source.match(/\/\/ --- ask error message \(pure\)[\s\S]*?\n\/\/ --- end ask error message/);
+  assert.ok(block, "script.js must keep the marked pure error-message block");
+  return new Function(`${block[0]}\nreturn askErrorMessage;`)();
+}
+
+test("the API error fallback shows the status without exposing the body", async () => {
+  const askErrorMessage = await loadAskErrorMessage();
+
+  // A safe JSON error from the API still wins.
+  assert.equal(askErrorMessage(429, { error: "利用回数が上限に達しました。" }), "利用回数が上限に達しました。");
+  assert.equal(askErrorMessage(502, { error: "回答を安全に検証できませんでした。" }), "回答を安全に検証できませんでした。");
+
+  // A non-JSON body (edge proxy HTML) parses to {}: only the status is reported.
+  assert.equal(askErrorMessage(502, {}), "Ask Forge の回答を取得できませんでした（HTTP 502）。");
+  assert.equal(askErrorMessage(500, {}), "Ask Forge の回答を取得できませんでした（HTTP 500）。");
+  assert.equal(askErrorMessage(0, {}), "Ask Forge の回答を取得できませんでした。");
+
+  // Nothing from a non-string or blank error field is rendered.
+  assert.equal(askErrorMessage(502, { error: "   " }), "Ask Forge の回答を取得できませんでした（HTTP 502）。");
+  const html = "<html><body>cf-ray 900abc internal detail</body></html>";
+  assert.equal(askErrorMessage(502, { error: { message: html } }), "Ask Forge の回答を取得できませんでした（HTTP 502）。");
+  assert.doesNotMatch(askErrorMessage(502, { body: html }), /html|cf-ray|internal detail/);
 });
 
 test("the public UI registry matches the server requirement registry", async () => {

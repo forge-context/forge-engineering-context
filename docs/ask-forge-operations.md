@@ -54,7 +54,9 @@ Cloudflare の runtime cache は data center ごとで、global に共有され�
 
 ## Audit trace
 
-`audit_traces` は request ID、時刻、route、primary/additional source、model/final sufficiency、controller warning、token、latency、result status、`cache_status`（hit / miss / bypass）、`model_called` を記録します。HIT でも audit trace は必ず記録します。質問について保存するのは SHA-256 の `question_hash` だけです。質問文そのものは保存しません。`question_preview` は保存を停止しており、新しい request では常に NULL を書き込みます。列は既存 DB との互換のため schema に残していますが、destructive migration は不要です。API key、Authorization header、raw IP、内部 Prompt、Artifact 本文は保存しません。このログは公開 Demo の技術評価用で、利用者向け Analytics ではありません。
+`audit_traces` は request ID、時刻、route、primary/additional source、model/final sufficiency、controller warning、token、latency、result status、`upstream_error_kind`、`cache_status`（hit / miss / bypass）、`model_called` を記録します。HIT でも audit trace は必ず記録します。質問について保存するのは SHA-256 の `question_hash` だけです。質問文そのものは保存しません。`question_preview` は保存を停止しており、新しい request では常に NULL を書き込みます。列は既存 DB との互換のため schema に残していますが、destructive migration は不要です。API key、Authorization header、raw IP、内部 Prompt、Artifact 本文は保存しません。このログは公開 Demo の技術評価用で、利用者向け Analytics ではありません。
+
+`upstream_error_kind` は `result_status = upstream_error` の request だけに入り、それ以外は NULL です。値は固定の safe category に限られます。`network`、`timeout`、`authentication`、`quota`、`api`、`malformed_model_json` と、想定外の例外に対する `internal` です。分類だけを保存するため、exception message、stack trace、upstream response body、API key、Prompt、質問文、client IP は保存しません。`0003` 適用前に書かれた row は NULL のままで問題ありません。
 
 ## Audit summary CLI
 
@@ -72,7 +74,9 @@ node scripts/audit_summary.mjs --remote --days 7
 node scripts/audit_summary.mjs --local --json
 ```
 
-出力は total requests、`result_status` / `route` / `final_sufficiency` 別件数、cache hit・miss・bypass と hit rate、`model_called` の件数と rate、total model tokens と model call あたりの平均 tokens、latency の average / P50 / P95（全 request と `model_called` のみの両方）、additional retrieval の件数と rate、`deterministic_controller`、`blocked_rate_limit`、`blocked_global_budget`、`upstream_error` の件数です。Cache HIT と block された request は latency 0 で記録されるため、model 呼び出しの実時間は `model_called` のみの行を見てください。
+出力は total requests、`result_status` / `route` / `final_sufficiency` 別件数、cache hit・miss・bypass と hit rate、`model_called` の件数と rate、total model tokens と model call あたりの平均 tokens、latency の average / P50 / P95（全 request と `model_called` のみの両方）、additional retrieval の件数と rate、`deterministic_controller`、`blocked_rate_limit`、`blocked_global_budget`、`upstream_error` の件数です。upstream failure が 1 件でもある場合は、続けて `upstream errors:` として `upstream_error_kind` 別の件数を表示します。観測された kind だけを出力し、0 件の kind は表示しません。Cache HIT と block された request は latency 0 で記録されるため、model 呼び出しの実時間は `model_called` のみの行を見てください。
+
+この CLI は `upstream_error_kind` を SELECT するため、migration `0003` を適用していない database では `no such column: upstream_error_kind` で失敗します。`--remote` を使う前に remote へ `0003` を適用してください。
 
 SELECT するのは集計に必要な列だけです。質問文、`question_hash`、`question_preview`、client 情報、secret、raw IP、Prompt は取得しないため出力にも現れません。`question_preview` は新規 request では常に NULL で、この CLI からも参照しません。`--remote` は SELECT のみで、remote D1 を変更しません。
 
@@ -80,7 +84,7 @@ SELECT するのは集計に必要な列だけです。質問文、`question_has
 
 1. `npx wrangler login` を行い、`npx wrangler d1 create ask-forge-demo` で D1 を作成します。
 2. 表示された database ID を `wrangler.jsonc` の `database_id` にある placeholder と置き換えます。
-3. `npx wrangler d1 migrations apply ask-forge-demo --remote` で migration を適用します。`0002` は `audit_traces` に `cache_status` と `model_called` を追加する additive migration です。既存 code とも互換なので、Deploy より先に適用してください。
+3. `npx wrangler d1 migrations apply ask-forge-demo --remote` で migration を適用します。`0002` は `audit_traces` に `cache_status` と `model_called` を、`0003` は `upstream_error_kind` を追加する additive migration です。どちらも既存 row を壊さず、既存 code とも互換です。**Deploy より先に適用してください。** 新しい code の audit INSERT は `upstream_error_kind` 列を含むため、列がない状態で Deploy すると audit 書き込みがすべて失敗します（API 応答は安全側で成功したままですが、trace が残りません）。
 4. Cloudflare Dashboard の Pages project で Settings → Bindings を開き、D1 database binding を追加します。Variable name は `DB`、Database は `ask-forge-demo` です。Preview と Production の両環境を確認します。
 5. Settings → Variables and Secrets で `BAILIAN_API_KEY` を encrypted Secret として追加します。
 6. 同じ画面で `BAILIAN_BASE_URL` と `BAILIAN_MODEL=qwen3.7-plus` を追加します。必要に応じて `GLOBAL_DAILY_REQUEST_LIMIT=300`、`GLOBAL_DAILY_TOKEN_LIMIT=300000`、`GLOBAL_TOKEN_RESERVATION=8000`、`CLIENT_HOURLY_REQUEST_LIMIT=10`、`CLIENT_DAILY_REQUEST_LIMIT=30`、secret 相当の `CLIENT_HASH_SALT` も追加します。

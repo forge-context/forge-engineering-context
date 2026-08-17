@@ -1,3 +1,17 @@
+// Closed set of upstream failure categories that may be persisted. Anything not on
+// this list — including any future or unexpected exception — is reported as
+// `internal`, so an audit row can never carry an upstream message, body, or trace.
+export const UPSTREAM_ERROR_KINDS = Object.freeze([
+  "network",
+  "timeout",
+  "authentication",
+  "quota",
+  "api",
+  "malformed_model_json",
+]);
+
+export const INTERNAL_ERROR_KIND = "internal";
+
 export class UpstreamError extends Error {
   constructor(kind, publicMessage, status = 502) {
     super(kind);
@@ -6,6 +20,11 @@ export class UpstreamError extends Error {
     this.publicMessage = publicMessage;
     this.status = status;
   }
+}
+
+export function classifyUpstreamError(error) {
+  const kind = error instanceof UpstreamError ? String(error.kind ?? "") : "";
+  return UPSTREAM_ERROR_KINDS.includes(kind) ? kind : INTERNAL_ERROR_KIND;
 }
 
 export class MalformedModelResponseError extends UpstreamError {

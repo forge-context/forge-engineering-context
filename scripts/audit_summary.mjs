@@ -21,7 +21,8 @@ const DATABASE = "ask-forge-demo";
 
 // Kept on one line: the --remote path rejects a --command containing newlines.
 const SELECT_COLUMNS =
-  "created_at, route, result_status, final_sufficiency, cache_status, model_called, total_tokens, latency_ms, " +
+  "created_at, route, result_status, upstream_error_kind, final_sufficiency, cache_status, model_called, " +
+  "total_tokens, latency_ms, " +
   "CASE WHEN additional_source IS NULL OR additional_source = '' THEN 0 ELSE 1 END AS additional_retrieval, " +
   "guardrails_triggered";
 
@@ -140,6 +141,9 @@ export function summarize(rows) {
     blockedRateLimit: 0,
     blockedGlobalBudget: 0,
     upstreamError: 0,
+    // Safe failure categories only; legacy rows written before migration 0003
+    // carry no kind and are counted as "(none)".
+    upstreamErrorKind: {},
   };
 
   const allLatencies = [];
@@ -177,7 +181,11 @@ export function summarize(rows) {
     if (guardrails(row.guardrails_triggered).includes("deterministic_controller")) summary.deterministicController += 1;
     if (resultStatus === "blocked_rate_limit") summary.blockedRateLimit += 1;
     if (resultStatus === "blocked_global_budget") summary.blockedGlobalBudget += 1;
-    if (resultStatus === "upstream_error") summary.upstreamError += 1;
+    if (resultStatus === "upstream_error") {
+      summary.upstreamError += 1;
+      const kind = row.upstream_error_kind;
+      bump(summary.upstreamErrorKind, kind == null || kind === "" ? "(none)" : String(kind));
+    }
   }
 
   if (summary.totalRequests > 0) {
@@ -253,6 +261,8 @@ export function formatSummary(summary, context = {}) {
     `  blocked_rate_limit: ${summary.blockedRateLimit}`,
     `  blocked_global_budget: ${summary.blockedGlobalBudget}`,
     `  upstream_error: ${summary.upstreamError}`,
+    // Only categories actually observed are listed; a kind with no occurrence is omitted.
+    ...(summary.upstreamError ? ["", ...counts("upstream errors", summary.upstreamErrorKind)] : []),
   ];
   return lines.join("\n");
 }

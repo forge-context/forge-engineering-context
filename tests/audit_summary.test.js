@@ -90,6 +90,7 @@ const FIXTURE_ROWS = [
     created_at: "2026-08-16T01:05:00.000Z",
     route: "impact_scope",
     result_status: "upstream_error",
+    upstream_error_kind: "malformed_model_json",
     final_sufficiency: null,
     cache_status: "miss",
     model_called: 1,
@@ -111,6 +112,15 @@ const FIXTURE_ROWS = [
     additional_retrieval: 0,
     guardrails_triggered: "[]",
   },
+];
+
+// Upstream failures from before migration 0003, and after it.
+const UPSTREAM_ROWS = [
+  { created_at: "2026-08-16T02:00:00.000Z", result_status: "upstream_error", upstream_error_kind: "api" },
+  { created_at: "2026-08-16T02:01:00.000Z", result_status: "upstream_error", upstream_error_kind: "malformed_model_json" },
+  { created_at: "2026-08-16T02:02:00.000Z", result_status: "upstream_error", upstream_error_kind: "internal" },
+  { created_at: "2026-08-16T02:03:00.000Z", result_status: "upstream_error", upstream_error_kind: null },
+  { created_at: "2026-08-16T02:04:00.000Z", result_status: "success", upstream_error_kind: null },
 ];
 
 test("summarize aggregates every reported audit dimension", () => {
@@ -159,6 +169,34 @@ test("summarize aggregates every reported audit dimension", () => {
   assert.equal(summary.blockedRateLimit, 1);
   assert.equal(summary.blockedGlobalBudget, 1);
   assert.equal(summary.upstreamError, 1);
+  assert.deepEqual(summary.upstreamErrorKind, { malformed_model_json: 1 });
+});
+
+test("upstream failures are counted per safe error kind", () => {
+  const summary = summarize([...FIXTURE_ROWS, ...UPSTREAM_ROWS]);
+
+  assert.equal(summary.upstreamError, 5);
+  assert.deepEqual(summary.upstreamErrorKind, {
+    malformed_model_json: 2,
+    api: 1,
+    internal: 1,
+    "(none)": 1,
+  });
+
+  const output = formatSummary(summary);
+  assert.match(output, /upstream errors:/);
+  assert.match(output, /malformed_model_json: 2/);
+  assert.match(output, /api: 1/);
+  // Kinds that never occurred are not printed, and the existing totals stay.
+  assert.doesNotMatch(output, /timeout|quota|authentication/);
+  assert.match(output, /upstream_error: 5/);
+  assert.match(output, /total requests: 13/);
+});
+
+test("a table without upstream failures prints no kind breakdown", () => {
+  const output = formatSummary(summarize(FIXTURE_ROWS.filter((row) => row.result_status !== "upstream_error")));
+  assert.match(output, /upstream_error: 0/);
+  assert.doesNotMatch(output, /upstream errors:/);
 });
 
 test("summarize stays defined on an empty table", () => {
@@ -180,6 +218,7 @@ test("percentile uses nearest rank", () => {
 test("the query never selects question, client, or preview columns", () => {
   const query = buildQuery(null);
   assert.doesNotMatch(query, /question_preview|question_hash|client/);
+  assert.match(query, /upstream_error_kind/);
   assert.match(buildQuery("2026-08-01"), /WHERE created_at >= '2026-08-01'/);
 });
 

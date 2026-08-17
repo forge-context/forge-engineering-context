@@ -164,6 +164,21 @@ if (comparison) {
   activateComparison("without");
 }
 
+// --- ask error message (pure) -----------------------------------------------
+// The failure message shown when /api/ask does not return a usable answer. Only
+// the API's own safe `error` string is ever displayed; when the body is not JSON
+// (an edge proxy HTML page, for example) nothing from the body is rendered — the
+// HTTP status alone is added so an upstream failure is still distinguishable.
+function askErrorMessage(status, data) {
+  const safeError = data && typeof data.error === "string" ? data.error.trim() : "";
+  if (safeError) return safeError;
+  const code = Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+  return code === null
+    ? "Ask Forge の回答を取得できませんでした。"
+    : `Ask Forge の回答を取得できませんでした（HTTP ${code}）。`;
+}
+// --- end ask error message ---------------------------------------------------
+
 const askForge = document.querySelector("[data-ask-forge]");
 
 if (askForge) {
@@ -490,7 +505,7 @@ if (askForge) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        showError(data.error || "Ask Forge の回答を取得できませんでした。", data.request_id);
+        showError(askErrorMessage(response.status, data), data.request_id);
       } else {
         await showResult(data);
       }

@@ -1,6 +1,6 @@
 # Ask Forge — Evaluation
 
-このドキュメントは、公開 Demo の Ask Forge に対して実施した検証内容と、そこで確認できた事実だけをまとめたものです。一般的な Benchmark ではなく、`owner-city-search` という単一要件に絞った targeted evaluation です。記載する数値は、すべて実際に観測した結果です。公開 Demo にはその後 `same-day-visit` を追加していますが、本ドキュメントの測定対象には含みません。
+このドキュメントは、公開 Demo の Ask Forge に対して実施した検証内容と、そこで確認できた事実だけをまとめたものです。一般的な Benchmark ではなく、要件を絞った targeted evaluation です。記載する数値は、すべて実際に観測した結果です。A〜F 節は `owner-city-search` を対象とした evaluation で、G 節は 2 件目の要件 `same-day-visit` に対する小規模な live qualification です。
 
 ## A. 何を評価しているか
 
@@ -77,11 +77,34 @@ warning なしで安定した点が重要です。guardrail は「毎回矯正�
 
 out-of-scope の判定は決定論的な scope gate で行うため、model を呼ばずに `insufficient` を返します。Cache HIT も model を呼ばず、token budget を消費しません。実際の分布は `scripts/audit_summary.mjs` で `audit_traces` から確認できます（[docs/ask-forge-operations.md](ask-forge-operations.md)）。
 
-## G. Current Limitations
+## G. Multi-requirement qualification（`same-day-visit`）
+
+2 件目の validated requirement である `same-day-visit` に対して、production の公開 endpoint で小規模な qualification を実施しました（2026-08-17）。目的は benchmark を広げることではなく、同じ Retrieval / Guardrail / Human Authority Architecture が 2 件目の要件でも production model path で成立するかの確認です。1 case あたり原則 1 request で、評価対象は文章の good/bad ではなく architecture contract です。各 case の実測値は [evaluation/same-day-visit-qualification.json](evaluation/same-day-visit-qualification.json) に記録しています。
+
+- **Architecture contract: 6/7 PASS、correctness failure 0 件**（current_behavior / impact_scope / human_decision / focused why / implementation_handoff / negative control / 言い換えによる routing stability）
+- **Human Decision は blocking 2 件のみ** — `gap.past_date_policy` と `gap.default_visit_date` です。minVisitDate の実装方法、message key、i18n の反映（derived implementation impact）と timezone 境界（non-blocking verification）は、blocking な Human Decision として提示されませんでした。
+- **Cross-requirement contamination なし** — `owner-city-search` の gap も surface も現れませんでした。
+- **Unsupported surface なし** — 挙げられた影響範囲・実装範囲はすべて、取得した Artifact に実在する ID でした。
+- **Retrieval は最大 2 Sources** — 追加取得が発生したのは focused why の 1 case のみで、gap が明示する `evidence_ref` を決定論的に辿った結果です。
+- **Negative control は model 呼び出しなし** — 認証方式の質問は決定論的 scope gate で `insufficient` になり、model tokens 0 を audit で確認しました。
+- **Model 呼び出しを伴った成功 4 case の実測値** — total tokens 合計 13,372、latency 5.7〜13.2 秒。cache HIT と scope gate の 2 case は model tokens 0、latency 0 でした。
+
+### Operational failure（correctness failure とは別）
+
+`impact_scope` の 1 case は、production 側の upstream failure により完了しませんでした。**これは evaluation correctness failure ではありません。** route は `impact_scope` / `project_context.json` に正しく分類されたうえで、grounded synthesis 段で upstream error となり、fail-safe が働いて回答を生成せずに終了しています。誤った route も、根拠のない回答も出力していません。
+
+- 1 回だけ再試行し、2 回とも同じ段階で失敗しました（router call のみの 198 tokens を消費、`result_status = upstream_error`、`guardrails_triggered = fail_safe_upstream`）。
+- Client 側には Cloudflare edge の非 JSON 502 が返っていました。API 自身の safe JSON error ではないため、画面に表示できる情報は HTTP status だけです。
+- **この failure の原因は特定できていません。** 実行時の production は `upstream_error_kind` 追加前の code であり、remote audit には `result_status = upstream_error` までしか残っていないためです。observability を追加する過程で、開発環境では類似の signature（routing 成功後、router 分の token だけを消費して synthesis 段で失敗）を持つ `malformed_model_json` を観測していますが、環境も実行経路も異なるため、この production failure が同一原因であるとは判断していません。`network` / `timeout` / `api` / `malformed_model_json` のいずれであったかは、記録が存在しない以上、事後に確定できません。
+- この「後から原因を分類できない」状態そのものが、`upstream_error_kind`（migration `0003`）を追加した理由です。適用後は同種の failure が category として audit に残ります。
+
+したがってこの qualification が示すのは、`same-day-visit` でも根拠と権限の境界が保たれること、および upstream failure が誤った回答ではなく fail-safe として現れることです。upstream failure の原因分類は、observability を適用した以降の観測を待つ必要があります。
+
+## H. Current Limitations
 
 この evaluation の適用範囲は限定的です。
 
-- **この evaluation の対象は `owner-city-search` 1 件** — 公開 Demo は `owner-city-search` と `same-day-visit` の 2 件を提供していますが、本ドキュメントに記載した測定結果はすべて `owner-city-search` に対して観測したものです。`same-day-visit` は同じ retrieval 経路と guardrail を通りますが、この evaluation では測定していません。
+- **要件ごとに検証の深さが異なる** — A〜F 節の evaluation は `owner-city-search` に対するもので、7 case を 3 回連続実行した結果です。`same-day-visit` については G 節の 7 case を 1 回実行した qualification だけであり、同じ深さでは測定していません。
 - **Artifact は curated** — 人手で整理した固定 Artifact を対象としており、自動生成された Context ではありません。
 - **Vector DB / Embedding は未使用** — 現在の retrieval は route から primary source への決定論的 mapping です。
 - **公開 Demo に general repository ingestion は含まれない** — 任意のリポジトリを調査するパイプラインは対象外です。

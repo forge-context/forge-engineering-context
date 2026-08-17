@@ -1,5 +1,5 @@
 import { ARTIFACTS_REVISION } from "./artifacts.generated.js";
-import { createBailianClient, resolveModel, UpstreamError } from "./bailian.js";
+import { classifyUpstreamError, createBailianClient, resolveModel, UpstreamError } from "./bailian.js";
 import { buildCacheKey, createRuntimeCache, CACHE_TTL_SECONDS } from "./cache.js";
 import { isKnownRequirement, PROMPT_VERSION, runRetrieval } from "./retrieval.js";
 import { createD1Store } from "./storage.js";
@@ -87,6 +87,9 @@ function baseTrace({ requestId, nowIso, requirementId, questionHash }) {
     totalTokens: 0,
     latencyMs: 0,
     resultStatus: "validation_error",
+    // Only set alongside resultStatus `upstream_error`, and only ever to a fixed
+    // safe category name — never an upstream message, body, or stack trace.
+    upstreamErrorKind: null,
     cacheStatus: "bypass",
     modelCalled: false,
   };
@@ -309,6 +312,7 @@ export async function handleAskRequest(request, env, dependencies = {}) {
       totalTokens: usage.totalTokens || 0,
       latencyMs: usage.latencyMs || 0,
       resultStatus: "upstream_error",
+      upstreamErrorKind: classifyUpstreamError(error),
       modelCalled: true,
     });
     await writeAuditSafely(store, trace);
