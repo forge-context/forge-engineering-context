@@ -5,6 +5,7 @@ import {
   SHARED_ARTIFACTS,
 } from "./artifacts.generated.js";
 import { MalformedModelResponseError } from "./bailian.js";
+import { citationSupported } from "./locator.js";
 
 // Bump whenever ROUTER_SYSTEM, SYNTHESIS_SYSTEM, the grounded token budget, or the
 // deterministic controller changes: it is a cache-key input, so a stale value would
@@ -124,6 +125,16 @@ function validateRouting(call) {
   return route;
 }
 
+// Controller-authored replacement for an answer that lost its support. Kept
+// free of any project, requirement or route vocabulary: it states only what the
+// controller can still stand behind — that the retrieved evidence did not carry
+// the answer.
+const SAFE_INSUFFICIENT_ANSWER = "取得した Artifact だけでは、この質問に十分な根拠を確認できませんでした。";
+
+// Validates one grounded step and returns the decision the controller will act
+// on. Contract violations stay hard failures; the single exception is the one
+// mismatch whose meaning is unambiguous, which is normalized instead — see
+// `recoverInsufficient`.
 function validateDecision(call, retrieved, canRetrieveMore) {
   const value = call.result;
   const fail = () => contractViolation(call);
@@ -131,9 +142,6 @@ function validateDecision(call, retrieved, canRetrieveMore) {
     throw fail();
   }
   if (!Array.isArray(value.evidence) || value.evidence.some((item) => typeof item !== "string")) {
-    throw fail();
-  }
-  if (value.sufficiency !== "partial" && value.evidence.length === 0) {
     throw fail();
   }
   for (const citation of value.evidence) {
@@ -147,9 +155,50 @@ function validateDecision(call, retrieved, canRetrieveMore) {
     if (typeof value.additional_reason !== "string" || !value.additional_reason.trim()) {
       throw fail();
     }
-  } else if (additional != null || value.additional_reason != null) {
-    throw fail();
+    return { decision: value, warnings: [] };
   }
+  const uncited = value.sufficiency !== "partial" && value.evidence.length === 0;
+  if (additional != null || value.additional_reason != null || uncited) {
+    return recoverInsufficient(call, value, fail);
+  }
+  return { decision: value, warnings: [] };
+}
+
+// The recoverable class of contract mismatch, and the only one: the model
+// reports `insufficient` and then deviates in a way that says the same thing
+// twice — it also names a source it would have wanted, or it cites nothing at
+// all. Both readings collapse to one: the retrieved evidence did not answer the
+// question. The named source is dropped rather than followed, because the
+// contract does not allow continuing retrieval from `insufficient`, and the
+// model's own answer is discarded with it, because that answer was written on
+// the assumption that more evidence would arrive.
+//
+// Deliberately narrow, and anchored on `insufficient`. A `sufficient` answer
+// that asks for more evidence is self-contradictory, a `sufficient` answer with
+// no citation is an unsupported claim, and an unrecognized source name is not a
+// source at all; all of them keep failing closed, as does every other contract
+// violation.
+function recoverInsufficient(call, value, fail) {
+  if (value.sufficiency !== "insufficient") throw fail();
+  const additional = value.additional_source;
+  if (additional != null && !SOURCE_NAMES.has(additional)) throw fail();
+  if (value.additional_reason != null && typeof value.additional_reason !== "string") throw fail();
+  const deviations = [];
+  if (additional != null) deviations.push(`dropped additional_source ${additional}`);
+  else if (value.additional_reason != null) deviations.push("dropped additional_reason");
+  // Left empty on purpose: the final grounding pass supplies the citation of
+  // the source that was actually checked.
+  if (!value.evidence.length) deviations.push("cited no checked source");
+  return {
+    decision: {
+      ...value,
+      answer: SAFE_INSUFFICIENT_ANSWER,
+      impact_items: [],
+      additional_source: null,
+      additional_reason: null,
+    },
+    warnings: [`normalized_insufficient_contract: ${deviations.join(", ")}`],
+  };
 }
 
 function normalizeHumanDecision(requirementId, artifacts, question, decision, retrieved) {
@@ -213,10 +262,19 @@ function enforceController(artifacts, question, route, raw, retrieved, canRetrie
   return { decision, warnings };
 }
 
-function normalizeImpact(artifacts, decision) {
+// The surfaces this requirement's own Project Context records. Requirement
+// scoped by construction: another requirement's surfaces live in a different
+// artifact instance behind the same filename, so they are simply absent here.
+function surfacesById(artifacts) {
+  const surfaces = artifacts["project_context.json"]?.relevant_implementation_surfaces || [];
+  return new Map(surfaces.map((surface) => [surface.id, surface]));
+}
+
+// Keeps only impact surfaces this requirement actually records, in first-seen
+// order. A property of the answer, not of one route: any response carrying
+// impact_items is filtered through the same allowlist.
+function allowlistImpactItems(byId, decision) {
   const warnings = [];
-  const surfaces = artifacts["project_context.json"].relevant_implementation_surfaces || [];
-  const byId = new Map(surfaces.map((surface) => [surface.id, surface]));
   const selected = [];
   for (const item of Array.isArray(decision.impact_items) ? decision.impact_items : []) {
     if (!item || !byId.has(item.surface_id)) {
@@ -225,6 +283,14 @@ function normalizeImpact(artifacts, decision) {
     }
     if (!selected.includes(item.surface_id)) selected.push(item.surface_id);
   }
+  return { selected, warnings };
+}
+
+// impact_scope owns its whole response: the answer, the evidence and the
+// impact list are all rebuilt from the allowlisted surfaces.
+function normalizeImpact(artifacts, decision) {
+  const byId = surfacesById(artifacts);
+  const { selected, warnings } = allowlistImpactItems(byId, decision);
   if (!selected.length) {
     for (const citation of decision.evidence) {
       const id = citation.startsWith("project_context.json#") ? citation.split("#", 2)[1] : "";
@@ -261,6 +327,70 @@ function normalizeImpact(artifacts, decision) {
     },
     warnings,
   };
+}
+
+// Citation of last resort: the source that was actually checked, named by an
+// anchor read out of that source rather than invented. For a structured
+// artifact that is its first non-empty collection, which is what the existing
+// safe answers already cite; for a prose artifact it is the document's first
+// heading. Neither depends on a field or heading any particular project uses.
+function checkedAnchor(artifacts, retrieved) {
+  for (const name of retrieved) {
+    const artifact = artifacts[name];
+    if (typeof artifact === "string") {
+      const heading = artifact.match(/^#{1,6}\s+(.+?)\s*$/m);
+      if (heading) return `${name}#${heading[1]}`;
+      continue;
+    }
+    if (!artifact) continue;
+    for (const [key, value] of Object.entries(artifact)) {
+      if (Array.isArray(value) && value.length) return `${name}#${key}`;
+    }
+  }
+  return null;
+}
+
+// Final grounding pass over the response the controller is about to return,
+// applied once for every route and to controller-authored citations as well as
+// model-authored ones. Unsupported evidence is dropped rather than failing the
+// request, matching how unsupported impact surfaces are already handled — but
+// an answer that ends up with no support left is not returned as an answer.
+function groundResponse(artifacts, retrieved, decision, fail) {
+  const warnings = [];
+  const byId = surfacesById(artifacts);
+  const impact = allowlistImpactItems(byId, decision);
+  warnings.push(...impact.warnings);
+  const impactItems = impact.selected.map((surfaceId) => ({
+    surface_id: surfaceId,
+    reason: decision.impact_items.find((item) => item.surface_id === surfaceId).reason,
+  }));
+
+  const evidence = [];
+  for (const citation of decision.evidence) {
+    if (citationSupported(artifacts, retrieved, citation)) evidence.push(citation);
+    else warnings.push(`removed unresolvable citation: ${citation}`);
+  }
+
+  if (!evidence.length && decision.sufficiency !== "partial") {
+    const fallback = checkedAnchor(artifacts, retrieved);
+    // Nothing retrieved can carry a resolvable locator, so there is no safe
+    // answer to degrade to and the request keeps failing closed.
+    if (!fallback) throw fail();
+    warnings.push("no supported citation remained");
+    return {
+      decision: {
+        ...decision,
+        sufficiency: "insufficient",
+        answer: SAFE_INSUFFICIENT_ANSWER,
+        evidence: [fallback],
+        impact_items: [],
+        additional_source: null,
+        additional_reason: null,
+      },
+      warnings,
+    };
+  }
+  return { decision: { ...decision, evidence, impact_items: impactItems }, warnings };
 }
 
 function completeCrossEvidence(artifacts, decision, retrieved) {
@@ -302,6 +432,20 @@ async function groundedStep(client, artifacts, question, route, retrieved, canRe
   });
 }
 
+// Guardrail names are the coarse, queryable half of the audit trail; the
+// warnings themselves stay in validation_warnings. Normalizing a recoverable
+// contract mismatch is separated from an ordinary controller adjustment because
+// it is the only place a model contract deviation stops being a failure, and it
+// has to remain visible as its own rate.
+function guardrailsFor(warnings) {
+  if (!warnings.length) return [];
+  const names = ["deterministic_controller"];
+  if (warnings.some((warning) => warning.startsWith("normalized_insufficient_contract"))) {
+    names.push("recoverable_contract_normalized");
+  }
+  return names;
+}
+
 export async function runRetrieval(question, client, requirementId = DEFAULT_REQUIREMENT_ID) {
   const artifacts = artifactsFor(requirementId);
   const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, latencyMs: 0, calls: 0 };
@@ -329,10 +473,11 @@ export async function runRetrieval(question, client, requirementId = DEFAULT_REQ
 
     const first = await groundedStep(client, artifacts, question, route, retrieved, true);
     addUsage(usage, first);
-    validateDecision(first, retrieved, true);
+    const validated = validateDecision(first, retrieved, true);
     const initialModelSufficiency = first.result.sufficiency;
     progress.modelSufficiency = initialModelSufficiency;
-    let { decision, warnings } = enforceController(artifacts, question, route, first.result, retrieved, true);
+    let { decision, warnings } = enforceController(artifacts, question, route, validated.decision, retrieved, true);
+    warnings.unshift(...validated.warnings);
     if (route === "impact_scope") {
       const normalized = normalizeImpact(artifacts, decision);
       decision = normalized.decision;
@@ -349,17 +494,21 @@ export async function runRetrieval(question, client, requirementId = DEFAULT_REQ
       retrieved.push(additionalSource);
       const second = await groundedStep(client, artifacts, question, route, retrieved, false);
       addUsage(usage, second);
-      validateDecision(second, retrieved, false);
+      const revalidated = validateDecision(second, retrieved, false);
       modelSufficiency = second.result.sufficiency;
-      const enforced = enforceController(artifacts, question, route, second.result, retrieved, false);
+      const enforced = enforceController(artifacts, question, route, revalidated.decision, retrieved, false);
       decision = enforced.decision;
-      warnings.push(...enforced.warnings);
+      warnings.push(...revalidated.warnings, ...enforced.warnings);
       completeCrossEvidence(artifacts, decision, retrieved);
     }
 
     if (route === "human_decision") {
       decision = normalizeHumanDecision(requirementId, artifacts, question, decision, retrieved);
     }
+
+    const grounded = groundResponse(artifacts, retrieved, decision, () => contractViolation(first));
+    decision = grounded.decision;
+    warnings.push(...grounded.warnings);
 
     return {
       requirementId,
@@ -376,7 +525,7 @@ export async function runRetrieval(question, client, requirementId = DEFAULT_REQ
       evidence: decision.evidence,
       impactItems: decision.impact_items || [],
       humanAuthority: humanAuthority(requirementId, artifacts, route, question),
-      guardrailsTriggered: warnings.length ? ["deterministic_controller"] : [],
+      guardrailsTriggered: guardrailsFor(warnings),
       validationWarnings: warnings,
       usage,
     };
