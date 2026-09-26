@@ -122,6 +122,13 @@ Forge は、大きく二種類のコンテキストを分離します。
 
 ```
 README.md
+site/
+  copy.mjs                 — 公開ページの全文言（日本語 / 中文 / English、同じ構成）
+  page.mjs                 — 1 つのテンプレートから言語ごとのページを生成
+demo-model.js              — PetClinic 実例の「人が決める → 実装方針が変わる → 承認」の状態（DOM なし）
+demo.js / script.js        — 実例の操作 / Ask Forge
+styles.css
+scripts/build_static_site.mjs — dist/ に `/`（日本語）・`/zh/`・`/en/` を出力
 docs/
   architecture.md          — コンセプトアーキテクチャの詳細
   ask-forge-operations.md  — 公開 Demo のローカル運用と Cloudflare 設定
