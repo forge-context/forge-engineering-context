@@ -829,7 +829,9 @@ test("the API error fallback shows the status without exposing the body", async 
 test("the public UI registry matches the server requirement registry", async () => {
   const { readFile } = await import("node:fs/promises");
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
-  const markup = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  // The page is rendered per locale from one template; every locale offers the same tabs.
+  const { renderPage } = await import("../site/page.mjs");
+  const markup = renderPage("ja");
   const serverIds = Object.keys(REQUIREMENTS).sort();
 
   // The UI must offer exactly what the API accepts: an extra tab would produce a
